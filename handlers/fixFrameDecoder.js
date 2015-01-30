@@ -2,6 +2,7 @@ exports.newFixFrameDecoder = function() {
     return new fixFrameDecoder();
 };
 
+var fixutil = require('../fixutils.js');
 var util = require('util');
 
 //static vars
@@ -89,7 +90,7 @@ function fixFrameDecoder(){
             
             //====================================Step 2: Validate message====================================
 
-            var calculatedChecksum = checksum(msg.substr(0, msg.length - 7));
+            var calculatedChecksum = fixutil.checksum(msg.substr(0, msg.length - 7));
             var extractedChecksum = msg.substr(msg.length - 4, 3);
 
             if (calculatedChecksum !== extractedChecksum) {
@@ -100,12 +101,11 @@ function fixFrameDecoder(){
                 return;
             }
 
-
             ctx.sendNext({data:msg, type:'data'});
         }
     }
     
-    this.outgoing = function(ctx, event){
+    this.outgoing = function (ctx, event) {
         if(event.type !== 'data'){
             ctx.sendNext(event);
             return;
@@ -114,26 +114,4 @@ function fixFrameDecoder(){
         if(ctx.stream.writable){ ctx.stream.write(event.data); }
         ctx.sendNext(event);
     }
-}
-
-function checksum(str) {
-    var chksm = 0;
-    for (var i = 0; i < str.length; i++) {
-        chksm += str.charCodeAt(i);
-    }
-
-    chksm = chksm % 256;
-
-    var checksumstr = '';
-    if (chksm < 10) {
-        checksumstr = '00' + (chksm + '');
-    }
-    else if (chksm >= 10 && chksm < 100) {
-        checksumstr = '0' + (chksm + '');
-    }
-    else {
-        checksumstr = '' + (chksm + '');
-    }
-
-    return checksumstr;
 }

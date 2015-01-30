@@ -64,39 +64,27 @@ var convertRawToFIX = exports.convertRawToFIX = function(map){
 }
 
 var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp, senderCompID, targetCompID, outgoingSeqNum){
-    //sys.log('c2F:'+JSON.stringify(msgraw));
     //defensive copy
-    var msg = {};
-    for (var tag in msgraw) {
-        if (msgraw.hasOwnProperty(tag)) msg[tag] = msgraw[tag];
-    }
-    
+	var msg = msgraw;
+    //for (var tag in msgraw) {
+    //    if (msgraw.hasOwnProperty(tag)) msg[tag] = msgraw[tag];
+    //}
+
     delete msg['9']; //bodylength
     delete msg['10']; //checksum
 
-    //TODO why is there a timestamp when a timeStamp is passed in?
-    //var timestamp = new Date();
     var headermsgarr = [];
     var bodymsgarr = [];
-    var trailermsgarr = [];
-
-    //msg['8'] = fixVersion; //fixversion
-    //msg['52'] = timeStamp; //timestamp
-    //msg['49'] = senderCompID; //sendercompid
-    //msg['56'] = targetCompID; //targetcompid
-    //msg['34'] = outgoingSeqNum; //seqnum
-
+    //var trailermsgarr = [];
 
     headermsgarr.push('35=' + msg['35'] , SOHCHAR);
     headermsgarr.push('52=' + timeStamp , SOHCHAR);
-    headermsgarr.push('49=' + senderCompID , SOHCHAR);
-    headermsgarr.push('56=' + targetCompID , SOHCHAR);
+    headermsgarr.push('49=' + (msg['49'] || senderCompID) , SOHCHAR);
+    headermsgarr.push('56=' + (msg['56'] || targetCompID) , SOHCHAR);
     headermsgarr.push('34=' + outgoingSeqNum , SOHCHAR);
 
-
     for (var tag in msg) {
-        if (msg.hasOwnProperty(tag)
-            && tag !== '8'
+        if (tag !== '8'
             && tag !== '9'
             && tag !== '35'
             && tag !== '10'
@@ -109,22 +97,21 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
     }
 
     var headermsg = headermsgarr.join('');
-    var trailermsg = trailermsgarr.join('');
+    //var trailermsg = trailermsgarr.join('');
     var bodymsg = bodymsgarr.join('');
 
     var outmsgarr = [];
-    outmsgarr.push('8=' , fixVersion , SOHCHAR);
-    outmsgarr.push('9=' , (headermsg.length + bodymsg.length + trailermsg.length) , SOHCHAR);
+    outmsgarr.push('8=', msg['8'] || fixVersion, SOHCHAR);
+    outmsgarr.push('9=' , (headermsg.length + bodymsg.length) , SOHCHAR);
     outmsgarr.push(headermsg);
     outmsgarr.push(bodymsg);
-    outmsgarr.push(trailermsg);
+    //outmsgarr.push(trailermsg);
 
     var outmsg = outmsgarr.join('');
 
     outmsg += '10=' + checksum(outmsg) + SOHCHAR;
         
     return outmsg;
-
 }
 
 var convertToMap = exports.convertToMap = function(msg) {
@@ -135,5 +122,4 @@ var convertToMap = exports.convertToMap = function(msg) {
         fix[kvpair[0]] = kvpair[1];
     }
     return fix;
-
 }

@@ -39,19 +39,20 @@ function sessionProcessor(isAcceptor, options) {
     this.sendHeartbeats = _.isUndefined(options.sendHeartbeats)? true : options.sendHeartbeats;
     this.expectHeartbeats = _.isUndefined(options.expectHeartbeats)? true : options.expectHeartbeats ;
     this.respondToLogon = _.isUndefined(options.respondToLogon)? true : options.respondToLogon;
+    this.resetSeqNumOnReconect = _.isUndefined(options.resetSeqNumOnReconect) ? true : options.resetSeqNumOnReconect;
 
     this.isLoggedIn = false;
     this.heartbeatIntervalID = "";
     this.timeOfLastIncoming = new Date().getTime();
     this.timeOfLastOutgoing = new Date().getTime();
     this.testRequestID = 1;
-    this.incomingSeqNum = 1;
-    this.outgoingSeqNum = 1;
+    this.incomingSeqNum = null;
+    this.outgoingSeqNum = null;
     this.isResendRequested = false;
     this.isLogoutRequested = false;
 
     this.file = null;
-
+    this.fileLogging = _.isUndefined(options.fileLogging) ? options.fileLogging : true;
 
     //||||||||||INCOMING||||||||||INCMOING||||||||||INCOMING||||||||||INCOMING||||||||||INCOMING||||||||||INCOMING||||||||||
     this.incoming = function (ctx, event) {
@@ -88,7 +89,7 @@ function sessionProcessor(isAcceptor, options) {
             self.senderCompID = fix['56'];
             self.targetCompID = fix['49'];
 
-            //==Process acceptor specific logic
+            //==Process acceptor specific logic (Server)
             if (self.isAcceptor) {
                 //==Check duplicate connections
                 if (self.isDuplicateFunc(self.senderCompID, self.targetCompID)) {
@@ -126,36 +127,36 @@ function sessionProcessor(isAcceptor, options) {
             var heartbeatInMilliSeconds = parseInt(heartbeatInMilliSecondsStr, 10) * 1000;
             //console.log("heartbeatInMilliSeconds="+heartbeatInMilliSeconds);//debug
 
-            //==Set heartbeat mechanism
+        	//==Set heartbeat mechanism
             self.heartbeatIntervalID = setInterval(function () {
-                var currentTime = new Date().getTime();
+            	var currentTime = new Date().getTime();
 
-                //==send heartbeats
-                if (currentTime - self.timeOfLastOutgoing > heartbeatInMilliSeconds && self.sendHeartbeats) {
-                    self.sendMsg(ctx.sendPrev,{
-                            '35': '0'
-                        }); //heartbeat
-                }
+            	//==send heartbeats
+            	if (currentTime - self.timeOfLastOutgoing > heartbeatInMilliSeconds && self.sendHeartbeats) {
+            		self.sendMsg(ctx.sendPrev, {
+            			'35': '0'
+            		}); //heartbeat
+            	}
 
-                //==ask counter party to wake up
-                if (currentTime - self.timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5)&& self.expectHeartbeats) {
-                    self.sendMsg(ctx.sendPrev,{
-                            '35': '1',
-                            '112': self.testRequestID++
-                        }); //test req id
-                }
+            	//==ask counter party to wake up
+            	if (currentTime - self.timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5) && self.expectHeartbeats) {
+            		self.sendMsg(ctx.sendPrev, {
+            			'35': '1',
+            			'112': self.testRequestID++
+            		}); //test req id
+            	}
 
-                //==counter party might be dead, kill connection
-                if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && self.expectHeartbeats) {
-                    var error = '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
-                    util.log(error);
-                    ctx.stream.end();
-                    ctx.sendNext({
-                        data: error,
-                        type: 'error'
-                    });
-                    return;
-                }
+            	//==counter party might be dead, kill connection
+            	if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && self.expectHeartbeats) {
+            		var error = self.targetCompID + '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
+            		util.log(error);
+            		ctx.stream.end();
+            		ctx.sendNext({
+            			data: error,
+            			type: 'error'
+            		});
+            		return;
+            	}
 
             }, heartbeatInMilliSeconds / 2); //End Set heartbeat mechanism==
             //==When session ends, stop heartbeats            
@@ -165,7 +166,7 @@ function sessionProcessor(isAcceptor, options) {
 
             //==Logon successful
             self.isLoggedIn = true;
-
+            ctx.stream.emit('logon', self.senderCompID, self.targetCompID);
             //==Logon ack (acceptor)
             if (self.isAcceptor && self.respondToLogon) {
                 /*var loginack = _.clone(fix);
@@ -177,13 +178,9 @@ function sessionProcessor(isAcceptor, options) {
 
         } // End Process logon==
         
-        //==Record message--TODO duplicate logic (n outgoing as well)
-            if (self.file === null) {
-                var filename = './traffic/' + self.senderCompID + '->' + self.targetCompID + '.log';
-                self.file = fs.createWriteStream(filename, { 'flags': 'a+' });
-                self.file.on('error', function(err){ console.log(err); });//todo print good log, end session
-            }
-        self.file.write(raw+'\n');
+        if (self.fileLogging) {
+        	self.logToFile(raw);
+        }
 
         //==Process seq-reset (no gap-fill)
         if (msgType === '4' && fix['123'] === undefined || fix['123'] === 'N') {
@@ -233,34 +230,8 @@ function sessionProcessor(isAcceptor, options) {
         //greater than expected
         else {
             //is it resend request?
-            if (msgType === '2') {
-                //TODO remove duplication in resend processor
-                //get list of msgs from archive and send them out, but gap fill admin msgs
-                var reader = fs.createReadStream(filename, {
-                    'flags': 'r',
-                    'encoding': 'binary',
-                    'mode': 0666,
-                    'bufferSize': 4 * 1024
-                })
-                //TODO full lines may not be read
-                reader.addListener("data", function (chunk) {
-                    var _fix = fixutil.converToMap(chunk);
-                    var _msgType = _fix[35];
-                    var _seqNo = _fix[34];
-                    if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
-                        //send seq-reset with gap-fill Y
-                        self.sendMsg(ctx.sendPrev,{
-                                '35': '4',
-                                '123': 'Y',
-                                '36': _seqNo
-                            });
-                    } else {
-                        //send msg w/ posdup Y
-                        self.sendMsg(ctx.sendPrev,_.extend(_fix, {
-                            '43': 'Y'
-                        }));
-                    }
-                });
+        	if (msgType === '2' && self.fileLogging) {
+        		self.resendMessages(ctx);
             }
             //did we already send a resend request?
             if (self.isResendRequested === false) {
@@ -299,42 +270,15 @@ function sessionProcessor(isAcceptor, options) {
         if (msgType === '1') {
             var testReqID = fix['112'];
             self.sendMsg(ctx.sendPrev,{
-                    '35': '0',
-                    '112': testReqID
-                });
+                '35': '0',
+                '112': testReqID
+            });
         }
 
         //==Process resend-request
         if (msgType === '2') {
-            //TODO remove duplication in resend processor
-            //get list of msgs from archive and send them out, but gap fill admin msgs
-            var reader = fs.createReadStream(filename, {
-                'flags': 'r',
-                'encoding': 'binary',
-                'mode': 0666,
-                'bufferSize': 4 * 1024
-            })
-            //TODO full lines may not be read
-            reader.addListener("data", function (chunk) {
-                var _fix = fixutil.converToMap(chunk);
-                var _msgType = _fix[35];
-                var _seqNo = _fix[34];
-                if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
-                    //send seq-reset with gap-fill Y
-                    self.sendMsg(ctx.sendPrev,{
-                            '35': '4',
-                            '123': 'Y',
-                            '36': _seqNo
-                        });
-                } else {
-                    //send msg w/ posdup Y
-                    self.sendMsg(ctx.sendPrev,_.extend(_fix, {
-                        '43': 'Y'
-                    }));
-                }
-            });
+        	self.resendMessages(ctx);
         }
-
 
         //==Process logout
         if (msgType === '5') {
@@ -343,56 +287,98 @@ function sessionProcessor(isAcceptor, options) {
             } else {
                 self.sendMsg(ctx.sendPrev,fix);
             }
-
+            ctx.stream.emit('logoff', self.senderCompID, self.targetCompID);
         }
         
-        ctx.sendNext({data:fix, type:'data'});
+        ctx.sendNext({data:fix, fixMsg:raw, type:'data'});
     }
 
-        //||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||
-        this.outgoing = function (ctx, event) {
+    //||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||
+    this.outgoing = function (ctx, event) {
+        if(event.type !== 'data'){
+            ctx.sendNext(event);
+            return;
+        }
             
-            if(event.type !== 'data'){
-                ctx.sendNext(event);
-                return;
-            }
-            
-            var fix = event.data;
+        var fix = event.data;
 
-            var msgType = fix['35'];
+        var msgType = fix['35'];
 
-            if(self.isLoggedIn === false && msgType === "A"){
-                self.fixVersion = fix['8'];
-                self.senderCompID = fix['49'];
-                self.targetCompID = fix['56'];
+        if(self.isLoggedIn === false && msgType === "A"){
+            self.fixVersion = fix['8'];
+            self.senderCompID = fix['49'];
+            self.targetCompID = fix['56'];
                 
-                //==Sync sequence numbers from data store
-                var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
-                self.incomingSeqNum = seqnums.incomingSeqNum;
-                self.outgoingSeqNum = seqnums.outgoingSeqNum;
+        	//==Sync sequence numbers from data store
+            if (self.resetSeqNumOnReconect) {
+            	var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
+            	self.incomingSeqNum = seqnums.incomingSeqNum;
+            	self.outgoingSeqNum = seqnums.outgoingSeqNum;
             }
+        }
             
-            self.sendMsg(ctx.sendNext, fix);
+        self.sendMsg(ctx.sendNext, fix);
+    }
+        
+        
+	//||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTIILTY||||||||||
+    this.logToFile = function(raw){
+        if (self.file === null) {
+        	fs.mkdir('./traffic', { 'flags': 'a+' }, function (err) {
+        		if (!err || (err && err.code == 'EEXIST')) {
+        			this.logfilename = './traffic/' + self.senderCompID + '_' + self.targetCompID + '.log';
+        			fs.unlink(this.logfilename);
+        			self.file = fs.createWriteStream(this.logfilename, { 'flags': 'a+' });
+        			self.file.on('error', function (err) { console.log(err); });//todo print good log, end session
+        			self.file.write(raw + '\n');
+        		}
+        	});
         }
-        
-        
-        //||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTIILTY||||||||||
-        this.sendMsg = function(senderFunc, msg){
-            var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(new Date()),
-                self.senderCompID,  self.targetCompID,  self.outgoingSeqNum);
+        else
+			self.file.write(raw + '\n');
+    }
 
-            self.outgoingSeqNum = self.outgoingSeqNum + 1;
-            self.timeOfLastOutgoing = new Date().getTime();
-        
-            //==Record message--TODO duplicate logic (n incoming as well)
-            if (self.file === null) {
-                var filename = './traffic/' + self.senderCompID + '->' + self.targetCompID + '.log';
-                self.file = fs.createWriteStream(filename, { 'flags': 'a+' });
-                self.file.on('error', function(err){ console.log(err); });//todo print good log, end session
-            }
-            self.file.write(outmsg+'\n');
+    this.resendMessages = function (ctx) {
+    	if (this.logfilename) {
+    		var reader = fs.createReadStream(this.logfilename, {
+    			'flags': 'r',
+    			'encoding': 'binary',
+    			'mode': 0666,
+    			'bufferSize': 4 * 1024
+    		})
+    		//TODO full lines may not be read
+    		reader.addListener("data", function (chunk) {
+    			var _fix = fixutil.converToMap(chunk);
+    			var _msgType = _fix[35];
+    			var _seqNo = _fix[34];
+    			if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
+    				//send seq-reset with gap-fill Y
+    				self.sendMsg(ctx.sendPrev, {
+    					'35': '4',
+    					'123': 'Y',
+    					'36': _seqNo
+    				});
+    			} else {
+    				//send msg w/ posdup Y
+    				self.sendMsg(ctx.sendPrev, _.extend(_fix, {
+    					'43': 'Y'
+    				}));
+    			}
+    		});
+    	}
+    };
 
-            senderFunc({data:outmsg, type:'data'});
+    this.sendMsg = function(senderFunc, msg){
+        var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(new Date()),
+            self.senderCompID,  self.targetCompID,  self.outgoingSeqNum);
+
+        self.outgoingSeqNum = self.outgoingSeqNum + 1;
+        self.timeOfLastOutgoing = new Date().getTime();
+        
+        if (self.fileLogging) {
+        	self.logToFile(outmsg);
         }
 
+        senderFunc({data:outmsg, type:'data'});
+    }
 }

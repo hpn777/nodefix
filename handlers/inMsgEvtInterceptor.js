@@ -7,7 +7,7 @@ function inMsgEvtInterceptor(session){
     var self = this;
     this.incoming = function(ctx, event){
         if(event.type === 'data'){
-            session.sessionEmitter.emit('incomingmsg',event.data[49], event.data[56], event.data);
+        	session.sessionEmitter.emit('incomingmsg', { senderId: event.data[49], targetId: event.data[56], msg: event.data, fixMsg: event.fixMsg });
         }
         else if(event.type==='resync'){
             self.emit('incomingresync',event.data[49], event.data[56], event.data);

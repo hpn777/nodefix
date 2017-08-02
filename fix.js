@@ -6,6 +6,7 @@ var path = require('path');
 var pipe = require('pipe');
 var _  = require('underscore');
 var fixutil = require('./fixutils.js');
+var { FIXClient } = require("./FIXClient.js");
 
 //TODO
 //Improve 'error' events. If sender/target exist, add them
@@ -14,6 +15,7 @@ var fixutil = require('./fixutils.js');
 //If no logon is established x seconds after connection, kill connection and notify client
 
 
+exports.FIXClient = FIXClient;
 exports.fixutil = fixutil;
 
 //-----------------------------Expose server API-----------------------------

@@ -1,5 +1,6 @@
 var fixutil = require('../fixutils.js');
 var util = require('util');
+var { Observable } = require('rx')
 
 //static vars
 var SOHCHAR = String.fromCharCode(1);
@@ -12,7 +13,9 @@ exports.FrameDecoder = function($){
     var self = this;
 
     this.decode = (data) => {
-        self.buffer = self.buffer + data;
+		self.buffer = self.buffer + data;
+		var messages = []
+
         while (self.buffer.length > 0) {
             //====================================Step 1: Extract complete FIX message====================================
 
@@ -27,7 +30,7 @@ exports.FrameDecoder = function($){
             if (isNaN(idxOfEndOfTag9)) {
                 var error = '[ERROR] Unable to find the location of the end of tag 9. Message probably malformed: '
                     + self.buffer.toString();
-                throw new Error({ message:error, type:'error'})
+                throw new Error(error)
             }
 
 
@@ -36,7 +39,7 @@ exports.FrameDecoder = function($){
             if (idxOfEndOfTag9 < 0 && self.buffer.length > 100) {
                 var error ='[ERROR] Over 100 character received but body length still not extractable.  Message malformed: '
                     + databuffer.toString();
-                throw new Error({ message:error, type:'error'})
+                throw new Error(error)
             }
 
 
@@ -50,7 +53,7 @@ exports.FrameDecoder = function($){
             if (isNaN(bodyLength)) {
                 var error = "[ERROR] Unable to parse bodyLength field. Message probably malformed: bodyLength='"
                     + _bodyLengthStr + "', msg=" + self.buffer.toString()
-                throw new Error({ message:error, type:'error'})
+                throw new Error(error)
             }
 
             var msgLength = bodyLength + idxOfEndOfTag9 + SIZEOFTAG10;
@@ -78,10 +81,12 @@ exports.FrameDecoder = function($){
             if (calculatedChecksum !== extractedChecksum) {
                 var error = '[WARNING] Discarding message because body length or checksum are wrong (expected checksum: '
                     + calculatedChecksum + ', received checksum: ' + extractedChecksum + '): [' + msg + ']'
-                throw new Error({ message:error, type:'error'})
+                throw new Error(error)
             }
 
-            return {data:msg, type:'data'}
-        }
+			messages.push(msg)
+			//return msg
+		}
+		return Observable.fromArray(messages)
     }
 }

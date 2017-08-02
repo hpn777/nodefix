@@ -40,9 +40,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.file = null;
     this.fileLogging = _.isUndefined(options.fileLogging) ? true : options.fileLogging
 
-    this.decode = function (event) {
+	this.decode = function (raw) {
         self.timeOfLastIncoming = new Date().getTime();
-        var raw = event.data;
         
         var fix = fixutil.convertToMap(raw);
 
@@ -51,7 +50,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //==Confirm first msg is logon==
         if (self.isLoggedIn === false && msgType !== 'A') {
             var error = '[ERROR] First message must be logon:' + raw;
-            throw new Error({ message:error, type:'error'})
+            throw new Error(error)
         }
 
         //==Process logon 
@@ -67,13 +66,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 //==Check duplicate connections
                 if (self.isDuplicateFunc(self.senderCompID, self.targetCompID)) {
                     var error = '[ERROR] Session already logged in:' + raw;
-                    throw new Error({ message:error, type:'error'})
+                    throw new Error(error)
                 }
 
                 //==Authenticate connection
                 if (!self.isAuthenticFunc(fix, fixClient.connection.remoteAddress)) {
                     var error = '[ERROR] Session not authentic:' + raw;
-                    throw new Error({ message:error, type:'error'})
+                    throw new Error(error)
                 }
                 
                 //==Sync sequence numbers from data store
@@ -110,7 +109,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             	//==counter party might be dead, kill connection
             	if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && self.expectHeartbeats) {
             		var error = self.targetCompID + '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
-            		throw new Error({ message:error, type:'error'})
+            		throw new Error(error)
             	}
 
             }, heartbeatInMilliSeconds / 2); //End Set heartbeat mechanism==
@@ -145,7 +144,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self.incomingSeqNum = resetseqno
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                throw new Error({ message:error, type:'error'})
+                throw new Error(error)
             }
         }
 
@@ -167,7 +166,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //if not posdup, error
             else {
                 var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + self.incomingSeqNum+ ') : ' + raw;
-                throw new Error({ message:error, type:'error'})
+				throw new Error(error)
             }
         }
         //greater than expected
@@ -197,7 +196,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self.incomingSeqNum = newSeqNo;
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                throw new Error({ message:error, type:'error'})
+                throw new Error(error)
             }
         }
 
@@ -227,7 +226,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             fixClient.connection.emit('logoff', self.senderCompID, self.targetCompID);
         }
         
-        return {data:fix, type:'data'}
+		return fix
     }
 
     this.send = function (fix) {
@@ -306,7 +305,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this._send = function(msg){
         var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(new Date()),
             self.senderCompID,  self.targetCompID,  self.outgoingSeqNum);
-
+		
         self.outgoingSeqNum = self.outgoingSeqNum + 1;
         self.timeOfLastOutgoing = new Date().getTime();
         

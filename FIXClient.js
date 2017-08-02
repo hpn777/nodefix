@@ -36,7 +36,7 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
         self.fixOut$ = Observable.fromEvent(fixSession, 'fixOut');
         
         self.fixIn$ = self.rawIn$
-            .map((raw) => { return frameDecoder.decode(raw)})
+            .flatMap((raw) => { return frameDecoder.decode(raw)})
         self.dataIn$ = self.fixIn$
             .map((msg) => { return fixSession.decode(msg)})
             .catch((ex)=>{

@@ -204,6 +204,7 @@ function sessionProcessor(isAcceptor, options) {
         var msgSeqNumStr = fix['34'];
         var msgSeqNum = parseInt(msgSeqNumStr, 10);
 
+        console.log('swq numbrers',msgSeqNum,self.incomingSeqNum)
         //expected sequence number
         if (msgSeqNum === self.incomingSeqNum) {
             self.incomingSeqNum++;

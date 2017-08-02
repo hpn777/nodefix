@@ -92,7 +92,6 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
             && tag !== '49'
             && tag !== '56'
             && tag !== '34'
-            && tag !== ""
             ) bodymsgarr.push(tag, '=' , msg[tag] , SOHCHAR);
     }
 

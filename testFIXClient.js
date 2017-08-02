@@ -19,10 +19,11 @@
 
 var {FIXClient} = require("./FIXClient.js");
 
-var client = new FIXClient("FIX.4.2", "initiator", "acceptor", 1234, "localhost")
+var client = new FIXClient("FIX.4.2", "initiator", "acceptor", {})
 
 
 client.connectAndLogon(1234,'localhost');
 
-client.fix$.subscribe((response)=>{console.log('fix',response)})
-client.data$.subscribe((response)=>{console.log('data',response)})
+//client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
+client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
+client.fixOut$.subscribe((response)=>{console.log('dataOut',response)})

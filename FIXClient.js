@@ -12,9 +12,7 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
     var PORT
     const fixSession = new FIXSession(this, false, opt)
     const frameDecoder = new FrameDecoder()
-    this.getSeqNums = () => { return {'incomingSeqNum': 1, 'outgoingSeqNum': 1 } }
     
-    //--CLIENT METHODS--
     this.send = function(fix) { 
         if(self.connection){
             fixSession.send(fix)
@@ -27,53 +25,28 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
         //self.p.state.session['remoteAddress'] = host;
         self.connection = net.createConnection(port, host, callback);
         
-        self.connect$ = Observable.create((observer) => {
-		    self.connection.on('connect', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
-
-        self.logon$ = Observable.create((observer) => {
-		    self.connection.on('logon', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
-
-        self.logoff$ = Observable.create((observer) => {
-		    self.connection.on('logoff', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
-
-        self.raw$ = Observable.create((observer) => {
-		    self.connection.on('data', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
-
-        self.fix$ = self.raw$
+        self.connect$ = Observable.fromEvent(self.connection, 'connect');
+        self.logon$ = Observable.fromEvent(fixSession, 'logon');
+        self.logoff$ = Observable.fromEvent(fixSession, 'logoff');
+        self.rawIn$ = Observable.fromEvent(self.connection, 'data');
+        self.end$ = Observable.fromEvent(self.connection, 'end');
+        self.close$ = Observable.fromEvent(self.connection, 'close');
+        self.error$ = Observable.fromEvent(self.connection, 'error');
+        self.dataOut$ = Observable.fromEvent(fixSession, 'dataOut');
+        self.fixOut$ = Observable.fromEvent(fixSession, 'fixOut');
+        
+        self.fixIn$ = self.rawIn$
             .map((raw) => { return frameDecoder.decode(raw)})
-            
-        self.data$ = self.fix$
+        self.dataIn$ = self.fixIn$
             .map((msg) => { return fixSession.decode(msg)})
-
-        self.end$ = Observable.create((observer) => {
-		    self.connection.on('end', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
-
-        self.close$ = Observable.create((observer) => {
-		    self.connection.on('close', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
-
-        self.error$ = Observable.create((observer) => {
-		    self.connection.on('error', function (evt) {
-			    observer.onNext(evt)
-            })
-        })
+            .catch((ex)=>{
+                console.log(ex)
+                self.connection.emit('error', ex)
+                return Observable.empty()}
+            )
+            .share()
+        
+        self.dataIn$.subscribe()
     }
     
     this.reconnect = function () {

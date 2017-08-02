@@ -2,6 +2,7 @@ var util = require('util');
 var fs = require('fs');
 var fixutil = require('../fixutils.js');
 var _  = require('underscore');
+var events = require('events');
 
 exports.FIXSession = function(fixClient, isAcceptor, options) {
     
@@ -50,8 +51,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //==Confirm first msg is logon==
         if (self.isLoggedIn === false && msgType !== 'A') {
             var error = '[ERROR] First message must be logon:' + raw;
-            util.log(error);
-            return { data:error, type:'error'}
+            throw new Error({ message:error, type:'error'})
         }
 
         //==Process logon 
@@ -67,15 +67,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 //==Check duplicate connections
                 if (self.isDuplicateFunc(self.senderCompID, self.targetCompID)) {
                     var error = '[ERROR] Session already logged in:' + raw;
-                    util.log(error);
-                    return { data:error, type:'error'}
+                    throw new Error({ message:error, type:'error'})
                 }
 
                 //==Authenticate connection
                 if (!self.isAuthenticFunc(fix, fixClient.connection.remoteAddress)) {
                     var error = '[ERROR] Session not authentic:' + raw;
-                    util.log(error);
-                    return { data:error, type:'error'}
+                    throw new Error({ message:error, type:'error'})
                 }
                 
                 //==Sync sequence numbers from data store
@@ -112,8 +110,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             	//==counter party might be dead, kill connection
             	if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && self.expectHeartbeats) {
             		var error = self.targetCompID + '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
-            		util.log(error);
-            		return { data:error, type:'error'}
+            		throw new Error({ message:error, type:'error'})
             	}
 
             }, heartbeatInMilliSeconds / 2); //End Set heartbeat mechanism==
@@ -148,8 +145,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self.incomingSeqNum = resetseqno
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                util.log(error);
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
         }
 
@@ -171,8 +167,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //if not posdup, error
             else {
                 var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + self.incomingSeqNum+ ') : ' + raw;
-                util.log(error);
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
         }
         //greater than expected
@@ -202,8 +197,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self.incomingSeqNum = newSeqNo;
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                util.log(error);
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
         }
 
@@ -233,7 +227,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             fixClient.connection.emit('logoff', self.senderCompID, self.targetCompID);
         }
         
-        return {data:fix, fixMsg:raw, type:'data'}
+        return {data:fix, type:'data'}
     }
 
     this.send = function (fix) {
@@ -251,6 +245,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self.outgoingSeqNum = seqnums.outgoingSeqNum;
             }
         }
+
+        self.emit('dataOut', fix)
 
         this._send(fix)
     }
@@ -287,7 +283,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     		})
     		//TODO full lines may not be read
     		reader.addListener("data", function (chunk) {
-    			var _fix = fixutil.converToMap(chunk);
+    			var _fix = fixutil.convertToMap(chunk);
     			var _msgType = _fix[35];
     			var _seqNo = _fix[34];
     			if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
@@ -314,6 +310,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         self.outgoingSeqNum = self.outgoingSeqNum + 1;
         self.timeOfLastOutgoing = new Date().getTime();
         
+        self.emit('fixOut', outmsg)
+
         if (self.fileLogging) {
         	self.logToFile(outmsg);
         }
@@ -321,3 +319,5 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         fixClient.connection.write(outmsg);
     }
 }
+
+util.inherits(exports.FIXSession, events.EventEmitter);

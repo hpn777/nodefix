@@ -100,7 +100,7 @@ function fixFrameDecoder(){
                 ctx.sendnext({data:error, type:'error'});
                 return;
             }
-
+            console.log('message from wire', msg)
             ctx.sendNext({data:msg, type:'data'});
         }
     }

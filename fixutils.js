@@ -116,10 +116,12 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
 
 var convertToMap = exports.convertToMap = function(msg) {
     var fix = {};
-    var keyvals = msg.split(SOHCHAR);
-    for (var kv in Object.keys(keyvals)) {
-        var kvpair = keyvals[kv].split('=');
-        fix[kvpair[0]] = kvpair[1];
-    }
+    var keyvals = msg.split(SOHCHAR)
+        .map((x)=>{ return x.split('=')})
+        .forEach((x) => { 
+            if(x[1])
+                fix[x[0]] = x[1]; 
+        });
+
     return fix;
 }

@@ -45,16 +45,17 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
             })
         })
 
-        self.data$ = Observable.create((observer) => {
+        self.raw$ = Observable.create((observer) => {
 		    self.connection.on('data', function (evt) {
 			    observer.onNext(evt)
             })
         })
 
-        self.data$
+        self.fix$ = self.raw$
             .map((raw) => { return frameDecoder.decode(raw)})
+            
+        self.data$ = self.fix$
             .map((msg) => { return fixSession.decode(msg)})
-            .subscribe((response)=>{console.log('RESPONSE',response)})
 
         self.end$ = Observable.create((observer) => {
 		    self.connection.on('end', function (evt) {

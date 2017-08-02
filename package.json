@@ -1,11 +1,11 @@
 {
   "name": "fix",
   "description": "FIX Protocol library",
-  "version": "0.0.6",
-  "homepage": "https://github.com/falconair/nodefix",
+  "version": "0.0.8",
+  "homepage": "https://github.com/hpn777/nodefix",
   "author": {
-    "name": "Shahbaz Chaudhary",
-    "email": "shahbazc@gmail.com"
+    "name": "Rafal Okninski",
+    "email": "hpn777@gmail.com"
   },
   "main": "fix",
   "directories": {
@@ -17,39 +17,18 @@
     "underscore": "^1.1.6",
     "underscore.string": "1.1.4"
   },
-  "engines": {
-    "node": ">=0.4.8"
-  },
   "repository": {
     "type": "git",
-    "url": "git://github.com/falconair/nodefix.git"
+    "url": "git://github.com/hpn777/nodefix.git"
   },
-  "_npmUser": {
-    "name": "falcon",
-    "email": "shahbazc@gmail.com"
-  },
-  "_id": "fix@0.0.6",
+  "_id": "fix@0.0.8",
   "devDependencies": {},
   "optionalDependencies": {},
-  "_engineSupported": true,
-  "_npmVersion": "1.1.18",
-  "_nodeVersion": "v0.6.14",
   "_defaultsLoaded": true,
-  "dist": {
-    "shasum": "07e593a27414ddc486ee52d50f9c8e09885a0305",
-    "tarball": "http://registry.npmjs.org/fix/-/fix-0.0.6.tgz"
-  },
-  "readme": "ERROR: No README data found!",
   "maintainers": [
     {
-      "name": "falcon",
-      "email": "shahbazc@gmail.com"
+      "name": "hpn777",
+      "email": "hpn777@gmail.com"
     }
-  ],
-  "_shasum": "07e593a27414ddc486ee52d50f9c8e09885a0305",
-  "_from": "fix@",
-  "_resolved": "https://registry.npmjs.org/fix/-/fix-0.0.6.tgz",
-  "bugs": {
-    "url": "https://github.com/falconair/nodefix/issues"
-  }
+  ]
 }

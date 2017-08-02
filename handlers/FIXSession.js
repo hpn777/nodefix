@@ -37,9 +37,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.isLogoutRequested = false;
 
     this.file = null;
-    this.fileLogging = _.isUndefined(options.fileLogging) ? options.fileLogging : true;
+    this.fileLogging = _.isUndefined(options.fileLogging) ? true : options.fileLogging
 
-    //||||||||||INCOMING||||||||||INCMOING||||||||||INCOMING||||||||||INCOMING||||||||||INCOMING||||||||||INCOMING||||||||||
     this.decode = function (event) {
         self.timeOfLastIncoming = new Date().getTime();
         var raw = event.data;
@@ -237,7 +236,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         return {data:fix, fixMsg:raw, type:'data'}
     }
 
-    //||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||OUTGOING||||||||||
     this.send = function (fix) {
         var msgType = fix['35'];
 
@@ -257,19 +255,23 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         this._send(fix)
     }
         
-        
-	//||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTILITY||||||||||UTIILTY||||||||||
     this.logToFile = function(raw){
         if (self.file === null) {
-        	fs.mkdir('./traffic', { 'flags': 'a+' }, function (err) {
-        		if (!err || (err && err.code == 'EEXIST')) {
-        			this.logfilename = './traffic/' + self.senderCompID + '_' + self.targetCompID + '.log';
-        			fs.unlink(this.logfilename);
-        			self.file = fs.createWriteStream(this.logfilename, { 'flags': 'a+' });
-        			self.file.on('error', function (err) { console.log(err); });//todo print good log, end session
-        			self.file.write(raw + '\n');
-        		}
-        	});
+            this.logfilename = './traffic/' + self.senderCompID + '_' + self.targetCompID + '.log';
+            
+            try{
+        	    fs.mkdirSync('./traffic', { 'flags': 'a+' })
+            }
+            catch(ex){}
+            
+            try{
+                fs.unlinkSync(this.logfilename);
+            }
+            catch(ex){}
+
+            self.file = fs.createWriteStream(this.logfilename, { 'flags': 'a+' });
+            self.file.on('error', function (err) { console.log(err); });//todo print good log, end session
+            self.file.write(raw + '\n');
         }
         else
 			self.file.write(raw + '\n');

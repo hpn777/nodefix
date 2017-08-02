@@ -1,6 +1,5 @@
 const { Observable } = require('rx')
 var net = require('net');
-var events = require('events');
 var fixutil = require('./fixutils.js');
 var {FrameDecoder} = require('./handlers/FrameDecoder')
 var {FIXSession} = require('./handlers/FIXSession')
@@ -12,6 +11,7 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
     var HOST
     var PORT
     const fixSession = new FIXSession(this, false, opt)
+    const frameDecoder = new FrameDecoder()
     this.getSeqNums = () => { return {'incomingSeqNum': 1, 'outgoingSeqNum': 1 } }
     
     //--CLIENT METHODS--
@@ -45,14 +45,15 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
             })
         })
 
-        self.data$ = new FrameDecoder(Observable.create((observer) => {
+        self.data$ = Observable.create((observer) => {
 		    self.connection.on('data', function (evt) {
 			    observer.onNext(evt)
             })
-        }))
+        })
 
         self.data$
-            .map((msg)=>{ return fixSession.decode(msg)})
+            .map((raw) => { return frameDecoder.decode(raw)})
+            .map((msg) => { return fixSession.decode(msg)})
             .subscribe((response)=>{console.log('RESPONSE',response)})
 
         self.end$ = Observable.create((observer) => {

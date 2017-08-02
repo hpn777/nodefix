@@ -7,11 +7,11 @@ var ENDOFTAG8 = 10;
 var STARTOFTAG9VAL = ENDOFTAG8 + 2;
 var SIZEOFTAG10 = 8;
 
-exports.FrameDecoder = function(data$){
+exports.FrameDecoder = function($){
     this.buffer = '';
     var self = this;
 
-    return data$.map((data) => {
+    this.decode = (data) => {
         self.buffer = self.buffer + data;
         while (self.buffer.length > 0) {
             //====================================Step 1: Extract complete FIX message====================================
@@ -90,5 +90,5 @@ exports.FrameDecoder = function(data$){
 
             return {data:msg, type:'data'}
         }
-    })
+    }
 }

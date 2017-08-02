@@ -27,9 +27,7 @@ exports.FrameDecoder = function($){
             if (isNaN(idxOfEndOfTag9)) {
                 var error = '[ERROR] Unable to find the location of the end of tag 9. Message probably malformed: '
                     + self.buffer.toString();
-                util.log(error);
-                //stream.end();
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
 
 
@@ -38,15 +36,13 @@ exports.FrameDecoder = function($){
             if (idxOfEndOfTag9 < 0 && self.buffer.length > 100) {
                 var error ='[ERROR] Over 100 character received but body length still not extractable.  Message malformed: '
                     + databuffer.toString();
-                util.log(error);
-                //stream.end();
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
 
 
             //If we don't have enough data to stop extracting body length, wait for more data
             if (idxOfEndOfTag9 < 0) {
-                return;
+                return Observable.empty()
             }
 
             var _bodyLengthStr = self.buffer.substring(STARTOFTAG9VAL, idxOfEndOfTag9);
@@ -54,16 +50,14 @@ exports.FrameDecoder = function($){
             if (isNaN(bodyLength)) {
                 var error = "[ERROR] Unable to parse bodyLength field. Message probably malformed: bodyLength='"
                     + _bodyLengthStr + "', msg=" + self.buffer.toString()
-                util.log(error);
-                //stream.end();
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
 
             var msgLength = bodyLength + idxOfEndOfTag9 + SIZEOFTAG10;
 
             //If we don't have enough data for the whole message, wait for more data
             if (self.buffer.length < msgLength) {
-                return;
+                return Observable.empty()
             }
 
             //Message received!
@@ -84,8 +78,7 @@ exports.FrameDecoder = function($){
             if (calculatedChecksum !== extractedChecksum) {
                 var error = '[WARNING] Discarding message because body length or checksum are wrong (expected checksum: '
                     + calculatedChecksum + ', received checksum: ' + extractedChecksum + '): [' + msg + ']'
-                util.log(error);
-                return { data:error, type:'error'}
+                throw new Error({ message:error, type:'error'})
             }
 
             return {data:msg, type:'data'}

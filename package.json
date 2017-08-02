@@ -1,7 +1,7 @@
 {
   "name": "fix",
   "description": "FIX Protocol library",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "homepage": "https://github.com/hpn777/nodefix",
   "author": {
     "name": "Rafal Okninski",

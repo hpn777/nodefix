@@ -20,10 +20,18 @@
 var {FIXClient} = require("./FIXClient.js");
 
 var client = new FIXClient("FIX.4.2", "initiator", "acceptor", {})
+var dupa = new FIXClient("FIX.4.2", "dupa", "acceptor", {})
+var cipa = new FIXClient("FIX.4.2", "cipa", "acceptor", {})
 
 
 client.connectAndLogon(1234,'localhost');
+dupa.connectAndLogon(1234,'localhost');
+cipa.connectAndLogon(1234,'localhost');
 
 //client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
-client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
-client.fixOut$.subscribe((response)=>{console.log('dataOut',response)})
+client.fixIn$.subscribe((response)=>{console.log('initiator fixIn',response)})
+client.fixOut$.subscribe((response)=>{console.log('initiator fixOut',response)})
+dupa.fixIn$.subscribe((response)=>{console.log('dupa fixIn',response)})
+dupa.fixOut$.subscribe((response)=>{console.log('dupa fixOut',response)})
+cipa.fixIn$.subscribe((response)=>{console.log('cipa fixIn',response)})
+cipa.fixOut$.subscribe((response)=>{console.log('cipa fixOut',response)})

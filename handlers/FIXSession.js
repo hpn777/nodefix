@@ -5,9 +5,7 @@ var _  = require('underscore');
 var events = require('events');
 
 exports.FIXSession = function(fixClient, isAcceptor, options) {
-    
     var self = this;
-
     this.isAcceptor = isAcceptor;
     this.isInitiator = !isAcceptor;
 
@@ -32,8 +30,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.timeOfLastIncoming = new Date().getTime();
     this.timeOfLastOutgoing = new Date().getTime();
     this.testRequestID = 1;
-    this.incomingSeqNum = null;
-    this.outgoingSeqNum = null;
+    var incomingSeqNum = null;
+    var outgoingSeqNum = null;
     this.isResendRequested = false;
     this.isLogoutRequested = false;
 
@@ -60,6 +58,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //from our perspective, not the counter party's
             self.senderCompID = fix['56'];
             self.targetCompID = fix['49'];
+            // self.targetCompID = fix['56'];
+            // self.senderCompID = fix['49'];
 
             //==Process acceptor specific logic (Server)
             if (self.isAcceptor) {
@@ -77,9 +77,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 
                 //==Sync sequence numbers from data store
                 var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
-                self.incomingSeqNum = seqnums.incomingSeqNum;
-                self.outgoingSeqNum = seqnums.outgoingSeqNum;
-
+                incomingSeqNum = seqnums.incomingSeqNum;
+                outgoingSeqNum = seqnums.outgoingSeqNum;
             } //End Process acceptor specific logic==
 
 
@@ -120,7 +119,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
             //==Logon successful
             self.isLoggedIn = true;
-            fixClient.connection.emit('logon', self.senderCompID, self.targetCompID);
+            self.emit('logon', self.targetCompID);
             //==Logon ack (acceptor)
             if (self.isAcceptor && self.respondToLogon) {
                 /*var loginack = _.clone(fix);
@@ -140,8 +139,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         if (msgType === '4' && fix['123'] === undefined || fix['123'] === 'N') {
             var resetseqnostr = fix['36'];
             var resetseqno = parseInt(resetseqno, 10);
-            if (resetseqno >= self.incomingSeqNum) {
-                self.incomingSeqNum = resetseqno
+            if (resetseqno >= incomingSeqNum) {
+                incomingSeqNum = resetseqno
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
                 throw new Error(error)
@@ -153,19 +152,19 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgSeqNum = parseInt(msgSeqNumStr, 10);
 
         //expected sequence number
-        if (msgSeqNum === self.incomingSeqNum) {
-            self.incomingSeqNum++;
+        if (msgSeqNum === incomingSeqNum) {
+            incomingSeqNum++;
             self.isResendRequested = false;
         }
         //less than expected
-        else if (msgSeqNum < self.incomingSeqNum) {
+        else if (msgSeqNum < incomingSeqNum) {
             //ignore posdup
             if (fix['43'] === 'Y') {
                 return;
             }
             //if not posdup, error
             else {
-                var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + self.incomingSeqNum+ ') : ' + raw;
+                var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + incomingSeqNum+ ') : ' + raw;
 				throw new Error(error)
             }
         }
@@ -181,7 +180,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 //send resend-request
                 self._send({
                         '35': '2',
-                        '7': self.incomingSeqNum,
+                        '7': incomingSeqNum,
                         '16': '0'
                     });
             }
@@ -192,8 +191,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             var newSeqNoStr = fix['36'];
             var newSeqNo = parseInt(newSeqNoStr, 10);
 
-            if (newSeqNo >= self.incomingSeqNum) {
-                self.incomingSeqNum = newSeqNo;
+            if (newSeqNo >= incomingSeqNum) {
+                incomingSeqNum = newSeqNo;
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
                 throw new Error(error)
@@ -223,7 +222,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             } else {
                 self._send(fix);
             }
-            fixClient.connection.emit('logoff', self.senderCompID, self.targetCompID);
+            self.emit('logoff', self.senderCompID, self.targetCompID);
         }
         
 		return fix
@@ -240,8 +239,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //==Sync sequence numbers from data store
             if (self.resetSeqNumOnReconect) {
                 var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
-                self.incomingSeqNum = seqnums.incomingSeqNum;
-                self.outgoingSeqNum = seqnums.outgoingSeqNum;
+                incomingSeqNum = seqnums.incomingSeqNum;
+                outgoingSeqNum = seqnums.outgoingSeqNum;
             }
         }
 
@@ -304,9 +303,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
     this._send = function(msg){
         var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(new Date()),
-            self.senderCompID,  self.targetCompID,  self.outgoingSeqNum);
+            self.senderCompID,  self.targetCompID,  outgoingSeqNum);
 		
-        self.outgoingSeqNum = self.outgoingSeqNum + 1;
+        outgoingSeqNum = outgoingSeqNum + 1;
         self.timeOfLastOutgoing = new Date().getTime();
         
         self.emit('fixOut', outmsg)
@@ -314,7 +313,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         if (self.fileLogging) {
         	self.logToFile(outmsg);
         }
-
+        
         fixClient.connection.write(outmsg);
     }
 }

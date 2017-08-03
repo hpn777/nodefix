@@ -10,8 +10,8 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
     var self = this
     var HOST
     var PORT
-    const fixSession = new FIXSession(this, false, opt)
-    const frameDecoder = new FrameDecoder()
+    var fixSession = new FIXSession(this, false, opt)
+    var frameDecoder = new FrameDecoder()
     
     this.send = function(fix) { 
         if(self.connection){

@@ -12,7 +12,6 @@
     "handlers": "./handlers"
   },
   "dependencies": {
-    "pipe": "0.0.2",
     "rx": "^4.1.0",
     "underscore": "^1.1.6",
     "underscore.string": "1.1.4"

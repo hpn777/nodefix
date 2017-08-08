@@ -1,40 +1,9 @@
+var moment = require('moment')
+var _ = require('underscore')
+const { fixRepeatingGroups } = require('./resources/fixSchema')
+
 var SOHCHAR = exports.SOHCHAR = String.fromCharCode(1);
-
-exports.getCurrentUTCTimeStamp = function(){ return getUTCTimeStamp(new Date()); }
-
-var getUTCTimeStamp = exports.getUTCTimeStamp = function(datetime){
-    var timestamp = datetime || new Date();
-
-    var year = timestamp.getUTCFullYear();
-    var month = timestamp.getUTCMonth() +1;
-    var day = timestamp.getUTCDate();
-    var hours = timestamp.getUTCHours();
-    var minutes = timestamp.getUTCMinutes();
-    var seconds = timestamp.getUTCSeconds();
-    var millis = timestamp.getUTCMilliseconds();
-
-
-    if (month < 10) { month = '0' + month;}
-
-    if (day < 10) { day = '0' + day;}
-
-    if (hours < 10) { hours = '0' + hours;}
-
-    if (minutes < 10) { minutes = '0' + minutes;}
-
-    if (seconds < 10) { seconds = '0' + seconds;}
-
-    if (millis < 10) {
-        millis = '00' + millis;
-    } else if (millis < 100) {
-        millis = '0' + millis;
-    }
-
-
-    var ts = [year, month, day, '-' , hours, ':' , minutes, ':' , seconds, '.' , millis].join('');
-
-    return ts;
-}
+exports.getUTCTimeStamp = function(){ return moment.utc().format('YYYYMMDD-HH:mm:ss.SSS'); }
 
 var checksum = exports.checksum = function(str){
     var chksm = 0;
@@ -83,17 +52,21 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
     headermsgarr.push('56=' + (msg['56'] || targetCompID) , SOHCHAR);
     headermsgarr.push('34=' + outgoingSeqNum , SOHCHAR);
 
-    for (var tag in msg) {
-        if (tag !== '8'
-            && tag !== '9'
-            && tag !== '35'
-            && tag !== '10'
-            && tag !== '52'
-            && tag !== '49'
-            && tag !== '56'
-            && tag !== '34'
-            ) bodymsgarr.push(tag, '=' , msg[tag] , SOHCHAR);
-    }
+    _.each(msg, (item, tag) => {
+        if (['8', '9', '35', '10', '52', '49', '56', '34'].indexOf(tag) === -1 ) {
+            if(Array.isArray(item)){
+                bodymsgarr.push(tag, '=' , item.length , SOHCHAR)
+                item.forEach((group)=>{
+                    _.each(group, (item, tag) => {
+                        bodymsgarr.push(tag, '=' , item , SOHCHAR)
+                    })
+                })
+            }
+            else{
+                bodymsgarr.push(tag, '=' , item , SOHCHAR)
+            }
+        }
+    })
 
     var headermsg = headermsgarr.join('');
     //var trailermsg = trailermsgarr.join('');
@@ -114,13 +87,51 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
 }
 
 var convertToMap = exports.convertToMap = function(msg) {
-    var fix = {};
+    var fix = {}
     var keyvals = msg.split(SOHCHAR)
         .map((x)=>{ return x.split('=')})
-        .forEach((x) => { 
-            if(x[1])
-                fix[x[0]] = x[1]; 
-        });
+
+    for(var i = 0; i < keyvals.length; ){
+        var pair = keyvals[i]
+        if(pair.length === 2){
+            var repeatinGroup = fixRepeatingGroups[pair[0]]
+            if(!repeatinGroup){
+                fix[pair[0]] = pair[1]
+                i++
+            }
+            else{
+                var nr = Number(pair[1])
+                if(nr){
+                    fix[pair[0]] = repeatingGroupToMap(repeatinGroup, nr, keyvals.slice(i+1, i+1 + (nr * repeatinGroup.length)))
+                    i += (1 + (nr * repeatinGroup.length))
+                }
+                else{
+                    throw new Error('Repeating Group: "' + pair.join('=') + '" is invalid')
+                }
+            }
+        }
+        else
+            i++
+    }
 
     return fix;
+}
+
+var repeatingGroupToMap = function(repeatinGroup, nr, keyvals){
+    var response = []
+    for(var i = 0, k = 0; i < nr; i++){
+        var group = {}
+        
+        repeatinGroup.forEach((key)=>{
+            if(key === keyvals[k][0])
+                group[key] = keyvals[k][1]
+            else 
+                throw new Error('Repeating Group: "' + JSON.stringify(keyvals) + '" is invalid')
+
+            k++
+        })
+
+        response.push(group)
+    }
+    return response
 }

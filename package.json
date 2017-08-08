@@ -1,7 +1,7 @@
 {
   "name": "fix",
   "description": "FIX Protocol library",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "homepage": "https://github.com/hpn777/nodefix",
   "author": {
     "name": "Rafal Okninski",
@@ -12,6 +12,7 @@
     "handlers": "./handlers"
   },
   "dependencies": {
+    "moment": "^2.18.1",
     "rx": "^4.1.0",
     "underscore": "^1.1.6",
     "underscore.string": "1.1.4"
@@ -20,7 +21,7 @@
     "type": "git",
     "url": "git://github.com/hpn777/nodefix.git"
   },
-  "_id": "fix@0.1.0",
+  "_id": "fix@0.1.1",
   "devDependencies": {},
   "optionalDependencies": {},
   "_defaultsLoaded": true,

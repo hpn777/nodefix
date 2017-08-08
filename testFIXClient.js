@@ -17,7 +17,14 @@
 // session.on("incomingmsg", function(msg){ console.log("EVENT incomingmsg: ", msg) });
 // session.on("outgoingmsg", function(msg){ console.log("EVENT outgoingmsg: ", msg) });
 
-var {FIXClient} = require("./FIXClient.js");
+var {FIXClient, fixutil} = require("./FIXClient.js");
+
+var fix1 = fixutil.convertRawToFIX({
+    12: 'a',
+    13: [{33: 1, 44: 2}, {44: 3, 33:4}],
+    14: 'b'
+})
+console.log(fix1, fixutil.convertToMap(fix1))
 
 var client = new FIXClient("FIX.4.2", "initiator", "acceptor", {})
 var dupa = new FIXClient("FIX.4.2", "dupa", "acceptor", {})

@@ -58,8 +58,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //from our perspective, not the counter party's
             self.senderCompID = fix['56'];
             self.targetCompID = fix['49'];
-            // self.targetCompID = fix['56'];
-            // self.senderCompID = fix['49'];
 
             //==Process acceptor specific logic (Server)
             if (self.isAcceptor) {
@@ -302,7 +300,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     };
 
     this._send = function(msg){
-        var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(new Date()),
+        var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(),
             self.senderCompID,  self.targetCompID,  outgoingSeqNum);
 		
         outgoingSeqNum = outgoingSeqNum + 1;

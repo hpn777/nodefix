@@ -56,7 +56,6 @@ exports.FIXServer = function(opt) {
                 return {msg: fixSession.decode(msg), senderId: senderId}
             })
             .catch((ex)=>{
-                console.log(ex)
                 connection.emit('error', ex)
                 return Observable.empty()}
             )

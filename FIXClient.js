@@ -40,7 +40,6 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
         self.dataIn$ = self.fixIn$
             .map((msg) => { return fixSession.decode(msg)})
             .catch((ex)=>{
-                console.log(ex)
                 self.connection.emit('error', ex)
                 return Observable.empty()}
             )

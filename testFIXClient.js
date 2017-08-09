@@ -19,13 +19,6 @@
 
 var {FIXClient, fixutil} = require("./FIXClient.js");
 
-var fix1 = fixutil.convertRawToFIX({
-    12: 'a',
-    13: [{33: 1, 44: 2}, {44: 3, 33:4}],
-    14: 'b'
-})
-console.log(fix1, fixutil.convertToMap(fix1))
-
 var client = new FIXClient("FIX.4.2", "initiator", "acceptor", {})
 var dupa = new FIXClient("FIX.4.2", "dupa", "acceptor", {})
 var cipa = new FIXClient("FIX.4.2", "cipa", "acceptor", {})
@@ -38,7 +31,10 @@ cipa.connectAndLogon(1234,'localhost');
 //client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
 client.fixIn$.subscribe((response)=>{console.log('initiator fixIn',response)})
 client.fixOut$.subscribe((response)=>{console.log('initiator fixOut',response)})
+client.error$.subscribe((x)=>{console.log(x)})
 dupa.fixIn$.subscribe((response)=>{console.log('dupa fixIn',response)})
 dupa.fixOut$.subscribe((response)=>{console.log('dupa fixOut',response)})
+dupa.error$.subscribe((x)=>{console.log(x)})
 cipa.fixIn$.subscribe((response)=>{console.log('cipa fixIn',response)})
 cipa.fixOut$.subscribe((response)=>{console.log('cipa fixOut',response)})
+cipa.error$.subscribe((x)=>{console.log(x)})

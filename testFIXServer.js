@@ -3,6 +3,7 @@ var {FIXServer} = require("./FIXServer.js");
 
 var server = new FIXServer({})
 server.dataIn$.subscribe((x)=>{console.log(x)})
+server.error$.subscribe((x)=>{console.log(x)})
 server.listen(1234, "localhost")
 // client.connectAndLogon(1234,'localhost');
 // fix.createServer({},function(session){

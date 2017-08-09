@@ -6,11 +6,11 @@ var events = require('events');
 
 exports.FIXSession = function(fixClient, isAcceptor, options) {
     var self = this;
-    this.isAcceptor = isAcceptor;
+    var isAcceptor = isAcceptor;
     this.isInitiator = !isAcceptor;
 
-    this.isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function () {return false;} : options.isDuplicateFunc;
-    this.isAuthenticFunc = _.isUndefined(options.isAuthenticFunc)? function () {return true;} : options.isAuthenticFunc;
+    var isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function () {return false;} : options.isDuplicateFunc;
+    var isAuthenticFunc = _.isUndefined(options.isAuthenticFunc)? function () {return true;} : options.isAuthenticFunc;
     this.getSeqNums = _.isUndefined(options.getSeqNums)? function () { return {'incomingSeqNum': 1, 'outgoingSeqNum': 1 }; } : options.getSeqNums;
     this.datastore = _.isUndefined(options.datastore)? function () {} : options.datastore ;
     
@@ -20,13 +20,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
     this.defaultHeartbeatSeconds = _.isUndefined(options.defaultHeartbeatSeconds)? "10" : options.defaultHeartbeatSeconds;
 
-    this.sendHeartbeats = _.isUndefined(options.sendHeartbeats)? true : options.sendHeartbeats;
-    this.expectHeartbeats = _.isUndefined(options.expectHeartbeats)? true : options.expectHeartbeats ;
-    this.respondToLogon = _.isUndefined(options.respondToLogon)? true : options.respondToLogon;
-    this.resetSeqNumOnReconect = _.isUndefined(options.resetSeqNumOnReconect) ? true : options.resetSeqNumOnReconect;
+    var sendHeartbeats = _.isUndefined(options.sendHeartbeats)? true : options.sendHeartbeats;
+    var expectHeartbeats = _.isUndefined(options.expectHeartbeats)? true : options.expectHeartbeats ;
+    var respondToLogon = _.isUndefined(options.respondToLogon)? true : options.respondToLogon;
+    var resetSeqNumOnReconect = _.isUndefined(options.resetSeqNumOnReconect) ? true : options.resetSeqNumOnReconect;
 
-    this.isLoggedIn = false;
-    this.heartbeatIntervalID = "";
+    var isLoggedIn = false;
+    var heartbeatIntervalID;
     this.timeOfLastIncoming = new Date().getTime();
     this.timeOfLastOutgoing = new Date().getTime();
     this.testRequestID = 1;
@@ -35,7 +35,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.isResendRequested = false;
     this.isLogoutRequested = false;
 
-    this.file = null;
+    var file = null;
     this.fileLogging = _.isUndefined(options.fileLogging) ? true : options.fileLogging
 
 	this.decode = function (raw) {
@@ -46,13 +46,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgType = fix['35'];
 
         //==Confirm first msg is logon==
-        if (self.isLoggedIn === false && msgType !== 'A') {
+        if (isLoggedIn === false && msgType !== 'A') {
             var error = '[ERROR] First message must be logon:' + raw;
             throw new Error(error)
         }
 
         //==Process logon 
-        else if (self.isLoggedIn === false && msgType === 'A') {
+        else if (isLoggedIn === false && msgType === 'A') {
             self.fixVersion = fix['8'];
             //incoming sender and target are swapped because we want sender/comp
             //from our perspective, not the counter party's
@@ -60,15 +60,15 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             self.targetCompID = fix['49'];
 
             //==Process acceptor specific logic (Server)
-            if (self.isAcceptor) {
+            if (isAcceptor) {
                 //==Check duplicate connections
-                if (self.isDuplicateFunc(self.senderCompID, self.targetCompID)) {
+                if (isDuplicateFunc(self.senderCompID, self.targetCompID)) {
                     var error = '[ERROR] Session already logged in:' + raw;
                     throw new Error(error)
                 }
 
                 //==Authenticate connection
-                if (!self.isAuthenticFunc(fix, fixClient.connection.remoteAddress)) {
+                if (!isAuthenticFunc(fix, fixClient.connection.remoteAddress)) {
                     var error = '[ERROR] Session not authentic:' + raw;
                     throw new Error(error)
                 }
@@ -85,18 +85,18 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //console.log("heartbeatInMilliSeconds="+heartbeatInMilliSeconds);//debug
 
         	//==Set heartbeat mechanism
-            self.heartbeatIntervalID = setInterval(function () {
+            heartbeatIntervalID = setInterval(function () {
             	var currentTime = new Date().getTime();
 
             	//==send heartbeats
-            	if (currentTime - self.timeOfLastOutgoing > heartbeatInMilliSeconds && self.sendHeartbeats) {
+            	if (currentTime - self.timeOfLastOutgoing > heartbeatInMilliSeconds && sendHeartbeats) {
             		self._send({
             			'35': '0'
             		}); //heartbeat
             	}
 
             	//==ask counter party to wake up
-            	if (currentTime - self.timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5) && self.expectHeartbeats) {
+            	if (currentTime - self.timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5) && expectHeartbeats) {
             		self._send({
             			'35': '1',
             			'112': self.testRequestID++
@@ -104,22 +104,23 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             	}
 
             	//==counter party might be dead, kill connection
-            	if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && self.expectHeartbeats) {
+            	if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && expectHeartbeats) {
             		var error = self.targetCompID + '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
-            		throw new Error(error)
+                    fixClient.connection.emit('error', error)
+                    //throw new Error(error)
             	}
 
-            }, heartbeatInMilliSeconds / 2); //End Set heartbeat mechanism==
-            //==When session ends, stop heartbeats            
-            fixClient.connection.on('end', function () {
-                clearInterval(self.heartbeatIntervalID);
+            }, heartbeatInMilliSeconds / 2);
+
+            fixClient.connection.on('close', function () {
+                clearInterval(heartbeatIntervalID);
             });
 
             //==Logon successful
-            self.isLoggedIn = true;
+            isLoggedIn = true;
             self.emit('logon', self.targetCompID);
             //==Logon ack (acceptor)
-            if (self.isAcceptor && self.respondToLogon) {
+            if (isAcceptor && respondToLogon) {
                 /*var loginack = _.clone(fix);
                 loginack[49] = fix[56];
                 loginack[56] = fix[49];
@@ -229,13 +230,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.send = function (fix) {
         var msgType = fix['35'];
 
-        if(self.isLoggedIn === false && msgType === "A"){
+        if(isLoggedIn === false && msgType === "A"){
             self.fixVersion = fix['8'];
             self.senderCompID = fix['49'];
             self.targetCompID = fix['56'];
                 
             //==Sync sequence numbers from data store
-            if (self.resetSeqNumOnReconect) {
+            if (resetSeqNumOnReconect) {
                 var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
                 incomingSeqNum = seqnums.incomingSeqNum;
                 outgoingSeqNum = seqnums.outgoingSeqNum;
@@ -248,7 +249,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
         
     this.logToFile = function(raw){
-        if (self.file === null) {
+        if (file === null) {
             this.logfilename = './traffic/' + self.senderCompID + '_' + self.targetCompID + '.log';
             
             try{
@@ -261,12 +262,14 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }
             catch(ex){}
 
-            self.file = fs.createWriteStream(this.logfilename, { 'flags': 'a+' });
-            self.file.on('error', function (err) { console.log(err); });//todo print good log, end session
-            self.file.write(raw + '\n');
+            file = fs.createWriteStream(this.logfilename, { 'flags': 'a+' });
+            file.on('error', function (err) { console.log(err); });//todo print good log, end session
+            fixClient.connection.on('close', function () {
+                file.close()
+            });
         }
-        else
-			self.file.write(raw + '\n');
+
+		file.write(raw + '\n');
     }
 
     this.resendMessages = function () {

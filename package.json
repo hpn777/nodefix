@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "moment": "^2.18.1",
+    "node-persist": "^2.1.0",
     "rx": "^4.1.0",
     "underscore": "^1.1.6",
     "underscore.string": "1.1.4"

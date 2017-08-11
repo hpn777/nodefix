@@ -1,8 +1,9 @@
 var fix = require('./fix.js');
 var {FIXServer} = require("./FIXServer.js");
 
-var server = new FIXServer({})
-server.dataIn$.subscribe((x)=>{console.log(x)})
+var server = new FIXServer({resetSeqNumOnReconect: true})
+server.fixIn$.subscribe((x)=>{console.log('fixIn', x)})
+server.fixOut$.subscribe((x)=>{console.log('fixOut', x)})
 server.error$.subscribe((x)=>{console.log(x)})
 server.listen(1234, "localhost")
 // client.connectAndLogon(1234,'localhost');

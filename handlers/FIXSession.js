@@ -1,22 +1,40 @@
 var util = require('util');
 var fs = require('fs');
+var storage = require('node-persist');
 var fixutil = require('../fixutils.js');
 var _  = require('underscore');
 var events = require('events');
+var sessions = {}
+
+storage.initSync()
 
 exports.FIXSession = function(fixClient, isAcceptor, options) {
     var self = this;
     var isAcceptor = isAcceptor;
     this.isInitiator = !isAcceptor;
+    this.fixVersion = options.fixVersion;
+    this.senderCompID = options.senderCompID;
+    this.targetCompID = options.targetCompID;
+    var key = options.senderCompID + '-' + options.targetCompID
 
-    var isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function () {return false;} : options.isDuplicateFunc;
+    var isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function (senderId, targetId) {
+        var key = senderId + targetId
+        return sessions[key] ? sessions[key].loggedOn : false
+    } : options.isDuplicateFunc;
+
     var isAuthenticFunc = _.isUndefined(options.isAuthenticFunc)? function () {return true;} : options.isAuthenticFunc;
-    this.getSeqNums = _.isUndefined(options.getSeqNums)? function () { return {'incomingSeqNum': 1, 'outgoingSeqNum': 1 }; } : options.getSeqNums;
-    this.datastore = _.isUndefined(options.datastore)? function () {} : options.datastore ;
     
-    this.fixVersion = null;
-    this.senderCompID = null;
-    this.targetCompID = null;
+    var retriveSession = _.isUndefined(options.retriveSession)? function (senderId, targetId) {
+        key = senderId + '-' + targetId
+        var savedSession = storage.getItemSync(key)
+        sessions[key] = savedSession || {'incomingSeqNum': 1, 'outgoingSeqNum': 1, isLoggedIn: false}
+        
+        return sessions[key]
+    } : options.retriveSession;
+    
+    var saveSession = function(){
+        storage.setItemSync(key, session)
+    }
 
     this.defaultHeartbeatSeconds = _.isUndefined(options.defaultHeartbeatSeconds)? "10" : options.defaultHeartbeatSeconds;
 
@@ -25,13 +43,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var respondToLogon = _.isUndefined(options.respondToLogon)? true : options.respondToLogon;
     var resetSeqNumOnReconect = _.isUndefined(options.resetSeqNumOnReconect) ? true : options.resetSeqNumOnReconect;
 
-    var isLoggedIn = false;
     var heartbeatIntervalID;
     this.timeOfLastIncoming = new Date().getTime();
     this.timeOfLastOutgoing = new Date().getTime();
     this.testRequestID = 1;
-    var incomingSeqNum = null;
-    var outgoingSeqNum = null;
+    
+    var session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1, isLoggedIn: false}
+
     this.isResendRequested = false;
     this.isLogoutRequested = false;
 
@@ -46,19 +64,19 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgType = fix['35'];
 
         //==Confirm first msg is logon==
-        if (isLoggedIn === false && msgType !== 'A') {
+        if (session.isLoggedIn === false && msgType !== 'A') {
             var error = '[ERROR] First message must be logon:' + raw;
             throw new Error(error)
         }
 
         //==Process logon 
-        else if (isLoggedIn === false && msgType === 'A') {
+        else if (session.isLoggedIn === false && msgType === 'A') {
             self.fixVersion = fix['8'];
             //incoming sender and target are swapped because we want sender/comp
             //from our perspective, not the counter party's
             self.senderCompID = fix['56'];
             self.targetCompID = fix['49'];
-
+            
             //==Process acceptor specific logic (Server)
             if (isAcceptor) {
                 //==Check duplicate connections
@@ -74,16 +92,14 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 }
                 
                 //==Sync sequence numbers from data store
-                var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
-                incomingSeqNum = seqnums.incomingSeqNum;
-                outgoingSeqNum = seqnums.outgoingSeqNum;
+                session = retriveSession(self.senderCompID, self.targetCompID);
             } //End Process acceptor specific logic==
 
 
             var heartbeatInMilliSecondsStr = _.isUndefined(fix[108] )? self.defaultHeartbeatSeconds : fix[108];
             var heartbeatInMilliSeconds = parseInt(heartbeatInMilliSecondsStr, 10) * 1000;
             //console.log("heartbeatInMilliSeconds="+heartbeatInMilliSeconds);//debug
-
+            
         	//==Set heartbeat mechanism
             heartbeatIntervalID = setInterval(function () {
             	var currentTime = new Date().getTime();
@@ -113,11 +129,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }, heartbeatInMilliSeconds / 2);
 
             fixClient.connection.on('close', function () {
+                session.isLoggedIn = false
+                saveSession()
                 clearInterval(heartbeatIntervalID);
             });
 
             //==Logon successful
-            isLoggedIn = true;
+            session.isLoggedIn = true;
             self.emit('logon', self.targetCompID);
             //==Logon ack (acceptor)
             if (isAcceptor && respondToLogon) {
@@ -137,9 +155,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //==Process seq-reset (no gap-fill)
         if (msgType === '4' && fix['123'] === undefined || fix['123'] === 'N') {
             var resetseqnostr = fix['36'];
-            var resetseqno = parseInt(resetseqno, 10);
-            if (resetseqno >= incomingSeqNum) {
-                incomingSeqNum = resetseqno
+            var resetseqno = parseInt(resetseqnostr, 10);
+            if (resetseqno >= session.incomingSeqNum) {
+                session.incomingSeqNum = resetseqno
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
                 throw new Error(error)
@@ -151,38 +169,34 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgSeqNum = parseInt(msgSeqNumStr, 10);
 
         //expected sequence number
-        if (msgSeqNum === incomingSeqNum) {
-            incomingSeqNum++;
+        if (msgSeqNum === session.incomingSeqNum) {
+            session.incomingSeqNum++;
             self.isResendRequested = false;
         }
         //less than expected
-        else if (msgSeqNum < incomingSeqNum) {
+        else if (msgSeqNum < session.incomingSeqNum) {
             //ignore posdup
             if (fix['43'] === 'Y') {
-                return;
+                return Observable.empty()
             }
             //if not posdup, error
             else {
-                var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + incomingSeqNum+ ') : ' + raw;
-				throw new Error(error)
+                logoffmsg = { '8': fixVersion, '49': self.senderCompID, '56': self.targetCompID, '35': 5, '58': 'sequence number lower than expected' };
+                self.send(logoffmsg)
+
+                var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + session.incomingSeqNum+ ') : ' + raw;
+                throw new Error(error)
+                //fixClient.connection.emit('error', error)
             }
         }
         //greater than expected
         else {
             //is it resend request?
         	if (msgType === '2' && self.fileLogging) {
-        		self.resendMessages();
+        		self.resendMessages(fix['7'], fix['16'])
             }
             //did we already send a resend request?
-            if (self.isResendRequested === false) {
-                self.isResendRequested = true;
-                //send resend-request
-                self._send({
-                        '35': '2',
-                        '7': incomingSeqNum,
-                        '16': '0'
-                    });
-            }
+            self.requestResend()
         }
 
         //==Process sequence-reset with gap-fill
@@ -190,8 +204,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             var newSeqNoStr = fix['36'];
             var newSeqNo = parseInt(newSeqNoStr, 10);
 
-            if (newSeqNo >= incomingSeqNum) {
-                incomingSeqNum = newSeqNo;
+            if (newSeqNo >= session.incomingSeqNum) {
+                session.incomingSeqNum = newSeqNo;
             } else {
                 var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
                 throw new Error(error)
@@ -211,35 +225,40 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
         //==Process resend-request
         if (msgType === '2') {
-        	self.resendMessages();
+        	self.resendMessages(fix['7'], fix['16']);
         }
 
         //==Process logout
         if (msgType === '5') {
+            
             if (self.isLogoutRequested) {
                 fixClient.connection.end();
             } else {
                 self._send(fix);
             }
+
+            session.isLoggedIn = false
+            // session.incomingSeqNum = 1
+            // session.outgoingSeqNum = 1
+
             self.emit('logoff', self.senderCompID, self.targetCompID);
         }
-        
+
+        saveSession()
 		return fix
     }
 
     this.send = function (fix) {
         var msgType = fix['35'];
 
-        if(isLoggedIn === false && msgType === "A"){
+        if(session.isLoggedIn === false && msgType === "A"){
             self.fixVersion = fix['8'];
             self.senderCompID = fix['49'];
             self.targetCompID = fix['56'];
                 
             //==Sync sequence numbers from data store
             if (resetSeqNumOnReconect) {
-                var seqnums = self.getSeqNums(self.senderCompID, self.targetCompID);
-                incomingSeqNum = seqnums.incomingSeqNum;
-                outgoingSeqNum = seqnums.outgoingSeqNum;
+                session = retriveSession(self.senderCompID, self.targetCompID);
             }
         }
 
@@ -272,8 +291,10 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 		file.write(raw + '\n');
     }
 
-    this.resendMessages = function () {
+    this.resendMessages = function (BeginSeqNo, EndSeqNo) {
     	if (this.logfilename) {
+            BeginSeqNo = BeginSeqNo ? Number(BeginSeqNo) : undefined
+    		EndSeqNo = EndSeqNo ? Number(EndSeqNo) : undefined
     		var reader = fs.createReadStream(this.logfilename, {
     			'flags': 'r',
     			'encoding': 'binary',
@@ -284,38 +305,53 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     		reader.addListener("data", function (chunk) {
     			var _fix = fixutil.convertToMap(chunk);
     			var _msgType = _fix[35];
-    			var _seqNo = _fix[34];
-    			if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
-    				//send seq-reset with gap-fill Y
-    				self._send({
-    					'35': '4',
-    					'123': 'Y',
-    					'36': _seqNo
-    				});
-    			} else {
-    				//send msg w/ posdup Y
-    				self._send(_.extend(_fix, {
-    					'43': 'Y'
-    				}));
-    			}
+                var _seqNo = Number(_fix[34]);
+                
+                if((!BeginSeqNo || BeginSeqNo <= _seqNo) && (!EndSeqNo || BeginSeqNo <= _seqNo)){
+                    if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
+                        //send seq-reset with gap-fill Y
+                        self._send({
+                            '35': '4',
+                            '123': 'Y',
+                            '36': _seqNo
+                        });
+                    } else {
+                        //send msg w/ posdup Y
+                        self._send(_.extend(_fix, {
+                            '43': 'Y'
+                        }));
+                    }
+                }
     		});
     	}
     };
 
+    this.requestResend = function(){
+        if (self.isResendRequested === false) {
+            self.isResendRequested = true;
+            //send resend-request
+            self._send({
+                '35': '2',
+                '7': session.incomingSeqNum,
+                '16': '0'
+            });
+        }
+    }
     this._send = function(msg){
         var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(),
-            self.senderCompID,  self.targetCompID,  outgoingSeqNum);
+            self.senderCompID,  self.targetCompID,  session.outgoingSeqNum);
 		
-        outgoingSeqNum = outgoingSeqNum + 1;
+        session.outgoingSeqNum++
         self.timeOfLastOutgoing = new Date().getTime();
         
         self.emit('fixOut', outmsg)
 
-        if (self.fileLogging) {
+        if (self.fileLogging && msg['123'] !== 'Y' && msg['43'] !== 'Y' ) {
         	self.logToFile(outmsg);
         }
         
         fixClient.connection.write(outmsg);
+        saveSession()
     }
 }
 

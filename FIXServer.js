@@ -16,6 +16,8 @@ exports.FIXServer = function(opt) {
     self.logoff$ = new Subject
     self.fixIn$ = new Subject
     self.dataIn$ = new Subject
+    self.fixOut$ = new Subject
+    self.dataOut$ = new Subject
     self.end$ = new Subject
     self.close$ = new Subject
     self.error$ = new Subject
@@ -33,6 +35,12 @@ exports.FIXServer = function(opt) {
 
         var logoff$ = Observable.fromEvent(fixSession, 'logoff')
         logoff$.subscribe(self.logoff$)
+
+        var dataOut$ = Observable.fromEvent(fixSession, 'dataOut')
+        dataOut$.subscribe(self.dataOut$)
+
+        var fixOut$ = Observable.fromEvent(fixSession, 'fixOut')
+        fixOut$.subscribe(self.fixOut$)
 
         var end$ = Observable.fromEvent(connection, 'end')
             .map((x)=>{ return senderId })

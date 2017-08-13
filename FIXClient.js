@@ -101,7 +101,7 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
         dataIn$.subscribe()
     }
     
-    reconnect = function () {
+    var reconnect = function () {
     	self.connect(PORT, HOST, true)
     }
     

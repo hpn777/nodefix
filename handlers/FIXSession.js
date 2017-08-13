@@ -27,7 +27,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var retriveSession = _.isUndefined(options.retriveSession)? function (senderId, targetId) {
         key = senderId + '-' + targetId
         var savedSession = storage.getItemSync(key)
-        sessions[key] = savedSession || {'incomingSeqNum': 1, 'outgoingSeqNum': 1, isLoggedIn: false}
+        sessions[key] = savedSession || {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
         
         return sessions[key]
     } : options.retriveSession;
@@ -48,8 +48,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.timeOfLastOutgoing = new Date().getTime();
     this.testRequestID = 1;
     
-    var session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1, isLoggedIn: false}
-
+    var session// = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
+    var isLoggedIn = false
     this.isResendRequested = false;
     this.isLogoutRequested = false;
 
@@ -64,13 +64,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgType = fix['35'];
 
         //==Confirm first msg is logon==
-        if (session.isLoggedIn === false && msgType !== 'A') {
+        if (isLoggedIn === false && msgType !== 'A') {
             var error = '[ERROR] First message must be logon:' + raw;
             throw new Error(error)
         }
 
         //==Process logon 
-        else if (session.isLoggedIn === false && msgType === 'A') {
+        else if (isLoggedIn === false && msgType === 'A') {
             self.fixVersion = fix['8'];
             //incoming sender and target are swapped because we want sender/comp
             //from our perspective, not the counter party's
@@ -129,13 +129,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }, heartbeatInMilliSeconds / 2);
 
             fixClient.connection.on('close', function () {
-                session.isLoggedIn = false
+                isLoggedIn = false
                 saveSession()
                 clearInterval(heartbeatIntervalID);
             });
 
             //==Logon successful
-            session.isLoggedIn = true;
+            isLoggedIn = true;
             self.emit('logon', self.targetCompID);
             //==Logon ack (acceptor)
             if (isAcceptor && respondToLogon) {
@@ -237,7 +237,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self._send(fix);
             }
 
-            session.isLoggedIn = false
+            isLoggedIn = false
             // session.incomingSeqNum = 1
             // session.outgoingSeqNum = 1
 
@@ -251,7 +251,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.send = function (fix) {
         var msgType = fix['35'];
 
-        if(session.isLoggedIn === false && msgType === "A"){
+        if(isLoggedIn === false && msgType === "A"){
             self.fixVersion = fix['8'];
             self.senderCompID = fix['49'];
             self.targetCompID = fix['56'];

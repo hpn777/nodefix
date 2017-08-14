@@ -12,23 +12,24 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var self = this;
     var isAcceptor = isAcceptor;
     this.isInitiator = !isAcceptor;
-    this.fixVersion = options.fixVersion;
+    var fixVersion = options.fixVersion;
+    var clearStorage = options.clearStorage
     this.senderCompID = options.senderCompID;
     this.targetCompID = options.targetCompID;
     var key = options.senderCompID + '-' + options.targetCompID
 
     var isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function (senderId, targetId) {
-        var key = senderId + targetId
-        return sessions[key] ? sessions[key].loggedOn : false
+        var key = senderId + '-' + targetId
+        return sessions[key] ? sessions[key].isLoggedIn : false
     } : options.isDuplicateFunc;
 
     var isAuthenticFunc = _.isUndefined(options.isAuthenticFunc)? function () {return true;} : options.isAuthenticFunc;
-    
+
     var retriveSession = _.isUndefined(options.retriveSession)? function (senderId, targetId) {
         key = senderId + '-' + targetId
         var savedSession = storage.getItemSync(key)
+
         sessions[key] = savedSession || {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
-        
         return sessions[key]
     } : options.retriveSession;
     
@@ -48,8 +49,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.timeOfLastOutgoing = new Date().getTime();
     this.testRequestID = 1;
     
-    var session// = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
-    var isLoggedIn = false
+    var session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
     this.isResendRequested = false;
     this.isLogoutRequested = false;
 
@@ -64,14 +64,14 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgType = fix['35'];
 
         //==Confirm first msg is logon==
-        if (isLoggedIn === false && msgType !== 'A') {
+        if (!session.isLoggedIn && msgType !== 'A') {
             var error = '[ERROR] First message must be logon:' + raw;
             throw new Error(error)
         }
 
         //==Process logon 
-        else if (isLoggedIn === false && msgType === 'A') {
-            self.fixVersion = fix['8'];
+        else if (!session.isLoggedIn && msgType === 'A') {
+            fixVersion = fix['8'];
             //incoming sender and target are swapped because we want sender/comp
             //from our perspective, not the counter party's
             self.senderCompID = fix['56'];
@@ -92,7 +92,10 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 }
                 
                 //==Sync sequence numbers from data store
-                session = retriveSession(self.senderCompID, self.targetCompID);
+                if(resetSeqNumOnReconect)
+                    session =  {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
+                else 
+                    session = retriveSession()
             } //End Process acceptor specific logic==
 
 
@@ -129,20 +132,16 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }, heartbeatInMilliSeconds / 2);
 
             fixClient.connection.on('close', function () {
-                isLoggedIn = false
+                session.isLoggedIn = false
                 saveSession()
                 clearInterval(heartbeatIntervalID);
             });
 
             //==Logon successful
-            isLoggedIn = true;
+            session.isLoggedIn = true;
             self.emit('logon', self.targetCompID);
             //==Logon ack (acceptor)
             if (isAcceptor && respondToLogon) {
-                /*var loginack = _.clone(fix);
-                loginack[49] = fix[56];
-                loginack[56] = fix[49];
-                self._send(loginack);*/
                 self._send(fix);
             }
 
@@ -237,11 +236,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 self._send(fix);
             }
 
-            isLoggedIn = false
+            //session.isLoggedIn = false
             // session.incomingSeqNum = 1
             // session.outgoingSeqNum = 1
+            //saveSession()
 
             self.emit('logoff', self.senderCompID, self.targetCompID);
+            fixClient.connection.destroy()//will close connection and force to save the state to disk
         }
 
         saveSession()
@@ -251,15 +252,16 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.send = function (fix) {
         var msgType = fix['35'];
 
-        if(isLoggedIn === false && msgType === "A"){
-            self.fixVersion = fix['8'];
+        if(!session.isLoggedIn && msgType === "A"){
+            fixVersion = fix['8'];
             self.senderCompID = fix['49'];
             self.targetCompID = fix['56'];
                 
             //==Sync sequence numbers from data store
-            if (resetSeqNumOnReconect) {
-                session = retriveSession(self.senderCompID, self.targetCompID);
-            }
+            if (resetSeqNumOnReconect) 
+                session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
+            else
+                session = retriveSession(self.senderCompID, self.targetCompID)
         }
 
         self.emit('dataOut', fix)
@@ -277,18 +279,31 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             catch(ex){}
             
             try{
-                fs.unlinkSync(this.logfilename);
+                if(resetSeqNumOnReconect)
+                    fs.unlinkSync(this.logfilename);
             }
             catch(ex){}
 
-            file = fs.createWriteStream(this.logfilename, { 'flags': 'a+' });
-            file.on('error', function (err) { console.log(err); });//todo print good log, end session
+            file = fs.createWriteStream(this.logfilename, { 'flags': 'a', 'mode': 0666 });
+            file.on('error', function (error) { fixClient.connection.emit('error', error) });
             fixClient.connection.on('close', function () {
                 file.close()
             });
         }
 
 		file.write(raw + '\n');
+    }
+
+    ResetFIXSession = function(){
+        session.incomingSeqNum = 1
+        session.outgoingSeqNum = 1
+        session.isLoggedIn = false
+        saveSession()
+
+        try{ 
+            fs.unlinkSync(this.logfilename);
+        }
+        catch(ex){}
     }
 
     this.resendMessages = function (BeginSeqNo, EndSeqNo) {
@@ -338,7 +353,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         }
     }
     this._send = function(msg){
-        var outmsg = fixutil.convertToFIX(msg, self.fixVersion,  fixutil.getUTCTimeStamp(),
+        var outmsg = fixutil.convertToFIX(msg, fixVersion,  fixutil.getUTCTimeStamp(),
             self.senderCompID,  self.targetCompID,  session.outgoingSeqNum);
 		
         session.outgoingSeqNum++

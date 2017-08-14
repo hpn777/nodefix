@@ -1,7 +1,7 @@
 var fix = require('./fix.js');
 var {FIXServer} = require("./FIXServer.js");
 
-var server = new FIXServer({resetSeqNumOnReconect: true})
+var server = new FIXServer({resetSeqNumOnReconect: false})
 server.fixIn$.subscribe((x)=>{console.log('fixIn', x)})
 server.fixOut$.subscribe((x)=>{console.log('fixOut', x)})
 server.error$.subscribe((x)=>{console.log(x)})

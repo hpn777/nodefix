@@ -29,6 +29,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var savedSession = storage.getItemSync(key)
 
         sessions[key] = savedSession || {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
+        sessions[key].isLoggedIn = false //default is always logged out
         return sessions[key]
     } : options.retriveSession;
     
@@ -131,8 +132,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }, heartbeatInMilliSeconds / 2);
 
             fixClient.connection.on('close', function () {
-                session.isLoggedIn = false
-                saveSession()
                 clearInterval(heartbeatIntervalID);
             });
 

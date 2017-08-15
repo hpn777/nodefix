@@ -54,7 +54,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var isLogoutRequested = false;
 
     var file = null;
-    this.fileLogging = _.isUndefined(options.fileLogging) ? true : options.fileLogging
+    var fileLogging = _.isUndefined(options.fileLogging) ? true : options.fileLogging
 
 	this.decode = function (raw) {
         timeOfLastIncoming = new Date().getTime();
@@ -145,7 +145,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
         } // End Process logon==
         
-        if (self.fileLogging) {
+        if (fileLogging) {
         	self.logToFile(raw);
         }
 
@@ -189,7 +189,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //greater than expected
         else {
             //is it resend request?
-        	if (msgType === '2' && self.fileLogging) {
+        	if (msgType === '2' && fileLogging) {
         		self.resendMessages(fix['7'], fix['16'])
             }
             //did we already send a resend request?
@@ -359,7 +359,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         
         self.emit('fixOut', outmsg)
 
-        if (self.fileLogging && msg['123'] !== 'Y' && msg['43'] !== 'Y' ) {
+        if (fileLogging && msg['123'] !== 'Y' && msg['43'] !== 'Y' ) {
         	self.logToFile(outmsg);
         }
         

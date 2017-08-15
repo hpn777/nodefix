@@ -11,11 +11,10 @@ storage.initSync()
 exports.FIXSession = function(fixClient, isAcceptor, options) {
     var self = this;
     var isAcceptor = isAcceptor;
-    this.isInitiator = !isAcceptor;
     var fixVersion = options.fixVersion;
     var clearStorage = options.clearStorage
-    this.senderCompID = options.senderCompID;
-    this.targetCompID = options.targetCompID;
+    var senderCompID = options.senderCompID;
+    var targetCompID = options.targetCompID;
     var key = options.senderCompID + '-' + options.targetCompID
 
     var isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function (senderId, targetId) {
@@ -37,7 +36,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         storage.setItemSync(key, session)
     }
 
-    this.defaultHeartbeatSeconds = _.isUndefined(options.defaultHeartbeatSeconds)? "10" : options.defaultHeartbeatSeconds;
+    var defaultHeartbeatSeconds = _.isUndefined(options.defaultHeartbeatSeconds)? "10" : options.defaultHeartbeatSeconds;
 
     var sendHeartbeats = _.isUndefined(options.sendHeartbeats)? true : options.sendHeartbeats;
     var expectHeartbeats = _.isUndefined(options.expectHeartbeats)? true : options.expectHeartbeats ;
@@ -45,19 +44,19 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var resetSeqNumOnReconect = _.isUndefined(options.resetSeqNumOnReconect) ? true : options.resetSeqNumOnReconect;
 
     var heartbeatIntervalID;
-    this.timeOfLastIncoming = new Date().getTime();
-    this.timeOfLastOutgoing = new Date().getTime();
-    this.testRequestID = 1;
+    var timeOfLastIncoming = new Date().getTime();
+    var timeOfLastOutgoing = new Date().getTime();
+    var testRequestID = 1;
     
     var session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
-    this.isResendRequested = false;
-    this.isLogoutRequested = false;
+    var isResendRequested = false;
+    var isLogoutRequested = false;
 
     var file = null;
     this.fileLogging = _.isUndefined(options.fileLogging) ? true : options.fileLogging
 
 	this.decode = function (raw) {
-        self.timeOfLastIncoming = new Date().getTime();
+        timeOfLastIncoming = new Date().getTime();
         
         var fix = fixutil.convertToMap(raw);
 
@@ -74,13 +73,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             fixVersion = fix['8'];
             //incoming sender and target are swapped because we want sender/comp
             //from our perspective, not the counter party's
-            self.senderCompID = fix['56'];
-            self.targetCompID = fix['49'];
+            senderCompID = fix['56'];
+            targetCompID = fix['49'];
             
             //==Process acceptor specific logic (Server)
             if (isAcceptor) {
                 //==Check duplicate connections
-                if (isDuplicateFunc(self.senderCompID, self.targetCompID)) {
+                if (isDuplicateFunc(senderCompID, targetCompID)) {
                     var error = '[ERROR] Session already logged in:' + raw;
                     throw new Error(error)
                 }
@@ -99,7 +98,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             } //End Process acceptor specific logic==
 
 
-            var heartbeatInMilliSecondsStr = _.isUndefined(fix[108] )? self.defaultHeartbeatSeconds : fix[108];
+            var heartbeatInMilliSecondsStr = _.isUndefined(fix[108] )? defaultHeartbeatSeconds : fix[108];
             var heartbeatInMilliSeconds = parseInt(heartbeatInMilliSecondsStr, 10) * 1000;
             //console.log("heartbeatInMilliSeconds="+heartbeatInMilliSeconds);//debug
             
@@ -108,23 +107,23 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             	var currentTime = new Date().getTime();
 
             	//==send heartbeats
-            	if (currentTime - self.timeOfLastOutgoing > heartbeatInMilliSeconds && sendHeartbeats) {
+            	if (currentTime - timeOfLastOutgoing > heartbeatInMilliSeconds && sendHeartbeats) {
             		self._send({
             			'35': '0'
             		}); //heartbeat
             	}
 
             	//==ask counter party to wake up
-            	if (currentTime - self.timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5) && expectHeartbeats) {
+            	if (currentTime - timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5) && expectHeartbeats) {
             		self._send({
             			'35': '1',
-            			'112': self.testRequestID++
+            			'112': testRequestID++
             		}); //test req id
             	}
 
             	//==counter party might be dead, kill connection
-            	if (currentTime - self.timeOfLastIncoming > heartbeatInMilliSeconds * 2 && expectHeartbeats) {
-            		var error = self.targetCompID + '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
+            	if (currentTime - timeOfLastIncoming > heartbeatInMilliSeconds * 2 && expectHeartbeats) {
+            		var error = targetCompID + '[ERROR] No heartbeat from counter party in milliseconds ' + heartbeatInMilliSeconds * 1.5;
                     fixClient.connection.emit('error', error)
                     //throw new Error(error)
             	}
@@ -139,7 +138,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
             //==Logon successful
             session.isLoggedIn = true;
-            self.emit('logon', self.targetCompID);
+            self.emit('logon', targetCompID);
             //==Logon ack (acceptor)
             if (isAcceptor && respondToLogon) {
                 self._send(fix);
@@ -170,7 +169,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //expected sequence number
         if (msgSeqNum === session.incomingSeqNum) {
             session.incomingSeqNum++;
-            self.isResendRequested = false;
+            isResendRequested = false;
         }
         //less than expected
         else if (msgSeqNum < session.incomingSeqNum) {
@@ -180,7 +179,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }
             //if not posdup, error
             else {
-                logoffmsg = { '8': fixVersion, '49': self.senderCompID, '56': self.targetCompID, '35': 5, '58': 'sequence number lower than expected' };
+                logoffmsg = { '8': fixVersion, '49': senderCompID, '56': targetCompID, '35': 5, '58': 'sequence number lower than expected' };
                 self.send(logoffmsg)
 
                 var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + session.incomingSeqNum+ ') : ' + raw;
@@ -230,8 +229,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //==Process logout
         if (msgType === '5') {
             
-            if (self.isLogoutRequested) {
-                fixClient.connection.end();
+            if (isLogoutRequested) {
+                fixClient.connection.destroy();
             } else {
                 self._send(fix);
             }
@@ -241,7 +240,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             // session.outgoingSeqNum = 1
             //saveSession()
 
-            self.emit('logoff', self.senderCompID, self.targetCompID);
+            self.emit('logoff', senderCompID, targetCompID);
             fixClient.connection.destroy()//will close connection and force to save the state to disk
         }
 
@@ -254,14 +253,14 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
         if(!session.isLoggedIn && msgType === "A"){
             fixVersion = fix['8'];
-            self.senderCompID = fix['49'];
-            self.targetCompID = fix['56'];
+            senderCompID = fix['49'];
+            targetCompID = fix['56'];
                 
             //==Sync sequence numbers from data store
             if (resetSeqNumOnReconect) 
                 session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
             else
-                session = retriveSession(self.senderCompID, self.targetCompID)
+                session = retriveSession(senderCompID, targetCompID)
         }
 
         self.emit('dataOut', fix)
@@ -271,7 +270,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         
     this.logToFile = function(raw){
         if (file === null) {
-            this.logfilename = './traffic/' + self.senderCompID + '_' + self.targetCompID + '.log';
+            this.logfilename = './traffic/' + senderCompID + '_' + targetCompID + '.log';
             
             try{
         	    fs.mkdirSync('./traffic', { 'flags': 'a+' })
@@ -294,7 +293,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 		file.write(raw + '\n');
     }
 
-    ResetFIXSession = function(){
+    this.resetFIXSession = function(){
         session.incomingSeqNum = 1
         session.outgoingSeqNum = 1
         session.isLoggedIn = false
@@ -342,8 +341,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     };
 
     this.requestResend = function(){
-        if (self.isResendRequested === false) {
-            self.isResendRequested = true;
+        if (isResendRequested === false) {
+            isResendRequested = true;
             //send resend-request
             self._send({
                 '35': '2',
@@ -354,10 +353,10 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
     this._send = function(msg){
         var outmsg = fixutil.convertToFIX(msg, fixVersion,  fixutil.getUTCTimeStamp(),
-            self.senderCompID,  self.targetCompID,  session.outgoingSeqNum);
+            senderCompID,  targetCompID,  session.outgoingSeqNum);
 		
         session.outgoingSeqNum++
-        self.timeOfLastOutgoing = new Date().getTime();
+        timeOfLastOutgoing = new Date().getTime();
         
         self.emit('fixOut', outmsg)
 

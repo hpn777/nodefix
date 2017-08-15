@@ -7,7 +7,7 @@ var {FIXSession} = require('./handlers/FIXSession')
 
 exports.fixutil = fixutil;
 
-exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
+exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{resetSeqNumOnReconect: true}
     var self = this
     var HOST
     var PORT
@@ -116,5 +116,9 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {
         //fixSession.send(fix)
     }
 
+    this.resetFIXSession = function(){
+        fixSession.resetFIXSession()
+    }
+    
     return this
 }

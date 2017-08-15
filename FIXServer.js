@@ -11,16 +11,17 @@ exports.FIXServer = function(opt) {
     var HOST
     var PORT
     
-    self.connect$ = new Subject
-    self.logon$ = new Subject
-    self.logoff$ = new Subject
-    self.fixIn$ = new Subject
-    self.dataIn$ = new Subject
-    self.fixOut$ = new Subject
-    self.dataOut$ = new Subject
-    self.end$ = new Subject
-    self.close$ = new Subject
-    self.error$ = new Subject
+    this.fixSessions = {}
+    this.connect$ = new Subject
+    this.logon$ = new Subject
+    this.logoff$ = new Subject
+    this.fixIn$ = new Subject
+    this.dataIn$ = new Subject
+    this.fixOut$ = new Subject
+    this.dataOut$ = new Subject
+    this.end$ = new Subject
+    this.close$ = new Subject
+    this.error$ = new Subject
 
     var server = net.createServer(function(connection) {
         var sessionHolder = {}
@@ -35,6 +36,7 @@ exports.FIXServer = function(opt) {
 
         var logoff$ = Observable.fromEvent(fixSession, 'logoff')
         logoff$.subscribe(self.logoff$)
+        logoff$.subscribe((x)=>{ delete self.fixSessions[senderId] })
 
         var dataOut$ = Observable.fromEvent(fixSession, 'dataOut')
         dataOut$.subscribe(self.dataOut$)
@@ -45,10 +47,12 @@ exports.FIXServer = function(opt) {
         var end$ = Observable.fromEvent(connection, 'end')
             .map((x)=>{ return senderId })
         end$.subscribe(self.end$)
+        end$.subscribe((x)=>{ delete self.fixSessions[x] })
 
         var close$ = Observable.fromEvent(connection, 'close')
             .map((x)=>{ return senderId })
         close$.subscribe(self.close$)
+        close$.subscribe((x)=>{ delete self.fixSessions[x] })
 
         var error$ = Observable.fromEvent(connection, 'error')
             .map((x)=>{ return { error: x, senderId: senderId }})
@@ -70,13 +74,36 @@ exports.FIXServer = function(opt) {
             .share()
         dataIn$.subscribe(self.dataIn$)
 
-        logon$.subscribe((x) => {senderId = x})
+        logon$.subscribe((x) => {
+            senderId = x
+            self.fixSessions[x] = sessionHolder
+        })
+
+        sessionHolder.send = function(fix) { 
+            fixSession.send(fix)
+        }
+
+        sessionHolder.resetFIXSession = function(){
+            fixSession.resetFIXSession()
+        }
     })
 
     this.listen = function(port, host, callback) {
         PORT = port
         HOST = host
         server.listen(port, host, callback);
+    }
+
+    this.send = function(targrtId, fix) { 
+        const sessionHolder = server.fixSessions[targrtId]
+        if(sessionHolder)
+            sessionHolder.send(fix)
+    }
+
+    this.resetFIXSession = function(targrtId){
+        const sessionHolder = server.fixSessions[targrtId]
+        if(sessionHolder)
+            sessionHolder.resetFIXSession()
     }
 
     return this

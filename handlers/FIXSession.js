@@ -14,6 +14,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var fixVersion = options.fixVersion;
     var clearStorage = options.clearStorage
     var senderCompID = options.senderCompID;
+    var senderSubID = options.senderSubID;
     var targetCompID = options.targetCompID;
     var key = options.senderCompID + '-' + options.targetCompID
 
@@ -74,8 +75,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             fixVersion = fix['8'];
             //incoming sender and target are swapped because we want sender/comp
             //from our perspective, not the counter party's
-            senderCompID = fix['56'];
-            targetCompID = fix['49'];
+            senderCompID = fix['56']
+            senderSubID = fix['50']
+            targetCompID = fix['49']
             
             //==Process acceptor specific logic (Server)
             if (isAcceptor) {
@@ -179,6 +181,10 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             //if not posdup, error
             else {
                 logoffmsg = { '8': fixVersion, '49': senderCompID, '56': targetCompID, '35': 5, '58': 'sequence number lower than expected' };
+                
+                if(senderSubID)
+                    logoffmsg['50'] = senderSubID
+                
                 self.send(logoffmsg)
 
                 var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + session.incomingSeqNum+ ') : ' + raw;
@@ -251,9 +257,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgType = fix['35'];
 
         if(!session.isLoggedIn && msgType === "A"){
-            fixVersion = fix['8'];
-            senderCompID = fix['49'];
-            targetCompID = fix['56'];
+            fixVersion = fixVersion || fix['8'];
+            senderCompID = senderCompID || fix['49'];
+            targetCompID = targetCompID || fix['56'];
                 
             //==Sync sequence numbers from data store
             if (resetSeqNumOnReconect) 
@@ -352,7 +358,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
     this._send = function(msg){
         var outmsg = fixutil.convertToFIX(msg, fixVersion,  fixutil.getUTCTimeStamp(),
-            senderCompID,  targetCompID,  session.outgoingSeqNum);
+            senderCompID,  targetCompID,  session.outgoingSeqNum, senderSubID);
 		
         session.outgoingSeqNum++
         timeOfLastOutgoing = new Date().getTime();

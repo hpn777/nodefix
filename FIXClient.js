@@ -1,6 +1,7 @@
 const { Observable, Subject } = require('rx')
 const _ = require('underscore')
 var net = require('net');
+var tls = require('tls');
 var fixutil = require('./fixutils.js');
 var {FrameDecoder} = require('./handlers/FrameDecoder')
 var {FIXSession} = require('./handlers/FIXSession')
@@ -55,9 +56,15 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
     this.connect = function(port, host, isReconnect){
         HOST = host
         PORT = port
-        //self.p.state.session['remoteAddress'] = host;
-        self.connection = net.createConnection(port, host);
         
+        var socket
+        if(opt.ssl)
+            socket = new tls.TLSSocket()
+        else{
+            socket = new net.Socket()
+        }
+        self.connection = socket.connect({port: port, host:host})
+
         if(!isReconnect){
             var logon$ = Observable.fromEvent(fixSession, 'logon')
             logon$.subscribe(self.logon$)
@@ -106,12 +113,18 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
     }
     
     this.logon = function (logonmsg) {
-        logonmsg = !logonmsg ? {'8':fixVersion, '49':senderCompID, '56': targetCompID, '35': 'A', '90': '0', '108': '10'} : logonmsg;
+        logonmsg = !logonmsg ? { '35': 'A', '90': '0', '108': '10'} : logonmsg;
+        
+        if(opt.userID && opt.password){
+            logonmsg['553'] = opt.userID
+            logonmsg['554'] = opt.password
+            logonmsg['96'] = opt.password
+        }
         self.send(logonmsg)
     }
 
     this.logoff = function (logoffReason) {
-    	logoffmsg = { '8': fixVersion, '49': senderCompID, '56': targetCompID, '35': 5, '58': logoffReason };
+    	logoffmsg = { '35': 5, '58': logoffReason };
         self.send(logoffmsg)
         //fixSession.send(fix)
     }

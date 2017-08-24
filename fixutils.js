@@ -29,10 +29,10 @@ var checksum = exports.checksum = function(str){
 
 //TODO change name to converMapToFIX
 var convertRawToFIX = exports.convertRawToFIX = function(map){
-    return convertToFIX(map, map[8], map[52], map[49], map[56], map[34]);
+    return convertToFIX(map, map[8], map[52], map[49], map[56], map[34], map[50]);
 }
 
-var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp, senderCompID, targetCompID, outgoingSeqNum){
+var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp, senderCompID, targetCompID, outgoingSeqNum, senderSubID){
     //defensive copy
 	var msg = msgraw;
     //for (var tag in msgraw) {
@@ -49,11 +49,13 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
     headermsgarr.push('35=' + msg['35'] , SOHCHAR);
     headermsgarr.push('52=' + timeStamp , SOHCHAR);
     headermsgarr.push('49=' + (msg['49'] || senderCompID) , SOHCHAR);
+    if(senderSubID)
+        headermsgarr.push('50=' + (msg['50'] || senderSubID) , SOHCHAR);
     headermsgarr.push('56=' + (msg['56'] || targetCompID) , SOHCHAR);
     headermsgarr.push('34=' + outgoingSeqNum , SOHCHAR);
 
     _.each(msg, (item, tag) => {
-        if (['8', '9', '35', '10', '52', '49', '56', '34'].indexOf(tag) === -1 ) {
+        if (['8', '9', '35', '10', '52', '49', '50', '56', '34'].indexOf(tag) === -1 ) {
             if(Array.isArray(item)){
                 bodymsgarr.push(tag, '=' , item.length , SOHCHAR)
                 item.forEach((group)=>{

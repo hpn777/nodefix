@@ -1,6 +1,7 @@
 var moment = require('moment')
 var _ = require('underscore')
 const { fixRepeatingGroups } = require('./resources/fixSchema')
+const { resolveKey } = require('./resources/fixtagnums')
 
 var SOHCHAR = exports.SOHCHAR = String.fromCharCode(1);
 exports.getUTCTimeStamp = function(){ return moment.utc().format('YYYYMMDD-HH:mm:ss.SSS'); }
@@ -117,6 +118,56 @@ var convertToMap = exports.convertToMap = function(msg) {
     }
 
     return fix;
+}
+
+var convertToJSON = exports.convertToJSON = function(msg) {
+    var fix = {}
+    var keyvals = msg.split(SOHCHAR)
+        .map((x)=>{ return x.split('=')})
+
+    for(var i = 0; i < keyvals.length; ){
+        var pair = keyvals[i]
+        if(pair.length === 2){
+            var repeatinGroup = fixRepeatingGroups[pair[0]]
+            if(!repeatinGroup){
+                fix[resolveKey(pair[0])] = pair[1]
+                i++
+            }
+            else{
+                var nr = Number(pair[1])
+                if(nr){
+                    fix[resolveKey(pair[0])] = repeatingGroupToJSON(repeatinGroup, nr, keyvals.slice(i+1, i+1 + (nr * repeatinGroup.length)))
+                    i += (1 + (nr * repeatinGroup.length))
+                }
+                else{
+                    throw new Error('Repeating Group: "' + pair.join('=') + '" is invalid')
+                }
+            }
+        }
+        else
+            i++
+    }
+
+    return fix;
+}
+
+var repeatingGroupToJSON = function(repeatinGroup, nr, keyvals){
+    var response = []
+    for(var i = 0, k = 0; i < nr; i++){
+        var group = {}
+        
+        repeatinGroup.forEach((key)=>{
+            if(key === keyvals[k][0])
+                group[resolveKey(key)] = keyvals[k][1]
+            else 
+                throw new Error('Repeating Group: "' + JSON.stringify(keyvals) + '" is invalid')
+
+            k++
+        })
+
+        response.push(group)
+    }
+    return response
 }
 
 var repeatingGroupToMap = function(repeatinGroup, nr, keyvals){

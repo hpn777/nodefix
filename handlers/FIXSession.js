@@ -147,9 +147,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
         } // End Process logon==
         
-        if (fileLogging) {
-        	self.logToFile(raw);
-        }
+        // if (fileLogging) {
+        // 	self.logToFile(raw);
+        // }
 
         //==Process seq-reset (no gap-fill)
         if (msgType === '4' && fix['123'] === undefined || fix['123'] === 'N') {
@@ -236,14 +236,10 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             
             if (isLogoutRequested) {
                 fixClient.connection.destroy();
+                self.resetFIXSession(false)
             } else {
                 self._send(fix);
             }
-
-            //session.isLoggedIn = false
-            // session.incomingSeqNum = 1
-            // session.outgoingSeqNum = 1
-            //saveSession()
 
             self.emit('logoff', senderCompID, targetCompID);
             fixClient.connection.destroy()//will close connection and force to save the state to disk
@@ -253,22 +249,36 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 		return fix
     }
 
-    this.send = function (fix) {
-        var msgType = fix['35'];
-
-        if(!session.isLoggedIn && msgType === "A"){
-            fixVersion = fixVersion || fix['8'];
-            senderCompID = senderCompID || fix['49'];
-            targetCompID = targetCompID || fix['56'];
-                
-            //==Sync sequence numbers from data store
-            if (resetSeqNumOnReconect) 
-                session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
-            else
-                session = retriveSession(senderCompID, targetCompID)
+    this.logon = function (logonmsg) {
+        logonmsg = !logonmsg ? { '35': 'A', '90': '0', '108': '10'} : logonmsg;
+        
+        if(options.userID && options.password){
+            logonmsg['553'] = options.userID
+            logonmsg['554'] = options.password
+            logonmsg['96'] = options.password
         }
 
-        self.emit('dataOut', fix)
+        fixVersion = fixVersion || logonmsg['8'];
+        senderCompID = senderCompID || logonmsg['49'];
+        targetCompID = targetCompID || logonmsg['56'];
+            
+        //==Sync sequence numbers from data store
+        if (resetSeqNumOnReconect) 
+            session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
+        else
+            session = retriveSession(senderCompID, targetCompID)
+
+        this.send(logonmsg)
+    }
+
+    this.logoff = function (logoffReason) {
+    	logoffmsg = { '35': 5, '58': logoffReason };
+        this.send(logoffmsg)
+        isLogoutRequested = true
+    }
+
+    this.send = function (fix) {
+        this.emit('dataOut', fix)
 
         this._send(fix)
     }
@@ -298,16 +308,18 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 		file.write(raw + '\n');
     }
 
-    this.resetFIXSession = function(){
+    this.resetFIXSession = function(clearHistory){
         session.incomingSeqNum = 1
-        session.outgoingSeqNum = 1
         session.isLoggedIn = false
-        saveSession()
-
+       
         try{ 
-            fs.unlinkSync(this.logfilename);
+            if(clearHistory){
+                session.outgoingSeqNum = 1
+                fs.unlinkSync(this.logfilename)
+            }
         }
         catch(ex){}
+        saveSession()
     }
 
     this.resendMessages = function (BeginSeqNo, EndSeqNo) {

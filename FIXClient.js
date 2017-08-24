@@ -113,24 +113,15 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
     }
     
     this.logon = function (logonmsg) {
-        logonmsg = !logonmsg ? { '35': 'A', '90': '0', '108': '10'} : logonmsg;
-        
-        if(opt.userID && opt.password){
-            logonmsg['553'] = opt.userID
-            logonmsg['554'] = opt.password
-            logonmsg['96'] = opt.password
-        }
-        self.send(logonmsg)
+        fixSession.logon(logonmsg)
     }
 
     this.logoff = function (logoffReason) {
-    	logoffmsg = { '35': 5, '58': logoffReason };
-        self.send(logoffmsg)
-        //fixSession.send(fix)
+        fixSession.logoff(logoffReason)
     }
 
-    this.resetFIXSession = function(){
-        fixSession.resetFIXSession()
+    this.resetFIXSession = function(clearHistory){
+        fixSession.resetFIXSession(clearHistory)
     }
     
     return this

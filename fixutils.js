@@ -36,9 +36,6 @@ var convertRawToFIX = exports.convertRawToFIX = function(map){
 var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp, senderCompID, targetCompID, outgoingSeqNum, senderSubID){
     //defensive copy
 	var msg = msgraw;
-    //for (var tag in msgraw) {
-    //    if (msgraw.hasOwnProperty(tag)) msg[tag] = msgraw[tag];
-    //}
 
     delete msg['9']; //bodylength
     delete msg['10']; //checksum
@@ -151,14 +148,14 @@ var convertToJSON = exports.convertToJSON = function(msg) {
     return fix;
 }
 
-var repeatingGroupToJSON = function(repeatinGroup, nr, keyvals){
+var repeatingGroupToMap = function(repeatinGroup, nr, keyvals){
     var response = []
     for(var i = 0, k = 0; i < nr; i++){
         var group = {}
         
         repeatinGroup.forEach((key)=>{
             if(key === keyvals[k][0])
-                group[resolveKey(key)] = keyvals[k][1]
+                group[key] = keyvals[k][1]
             else 
                 throw new Error('Repeating Group: "' + JSON.stringify(keyvals) + '" is invalid')
 
@@ -170,14 +167,14 @@ var repeatingGroupToJSON = function(repeatinGroup, nr, keyvals){
     return response
 }
 
-var repeatingGroupToMap = function(repeatinGroup, nr, keyvals){
+var repeatingGroupToJSON = function(repeatinGroup, nr, keyvals){
     var response = []
     for(var i = 0, k = 0; i < nr; i++){
         var group = {}
         
         repeatinGroup.forEach((key)=>{
             if(key === keyvals[k][0])
-                group[key] = keyvals[k][1]
+                group[resolveKey(key)] = keyvals[k][1]
             else 
                 throw new Error('Repeating Group: "' + JSON.stringify(keyvals) + '" is invalid')
 

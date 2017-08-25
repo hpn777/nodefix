@@ -26,8 +26,10 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
     self.logoff$ = new Subject
     self.fixIn$ = new Subject
     self.dataIn$ = new Subject
+    self.jsonIn$ = new Subject
     self.fixOut$ = new Subject
     self.dataOut$ = new Subject
+    self.jsonOut$ = new Subject
     self.end$ = new Subject
     self.close$ = new Subject
     self.error$ = new Subject
@@ -77,6 +79,9 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
 
             var fixOut$ = Observable.fromEvent(fixSession, 'fixOut')
             fixOut$.subscribe(self.fixOut$)
+
+            var jsonOut$ = fixOut$.map(fixutil.convertToJSON)
+            jsonOut$.subscribe(self.jsonOut$)
         }
                 
         var connect$ = Observable.fromEvent(self.connection, 'connect')
@@ -95,6 +100,9 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
         var fixIn$ = rawIn$
             .flatMap((raw) => { return frameDecoder.decode(raw)})
         fixIn$.subscribe(self.fixIn$)
+        
+        var jsonIn$ = fixIn$.map(fixutil.convertToJSON)
+        jsonIn$.subscribe(self.jsonIn$)
 
         var dataIn$ = fixIn$
             .map((msg) => { return fixSession.decode(msg)})

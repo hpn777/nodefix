@@ -29,8 +29,8 @@ client.connect(1234,'localhost');
 // cipa.connect(1234,'localhost');
 
 //client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
-client.fixIn$.subscribe((response)=>{console.log('initiator fixIn',response)})
-client.fixOut$.subscribe((response)=>{console.log('initiator fixOut',response)})
+client.jsonIn$.subscribe((response)=>{console.log('initiator jsonIn',response)})
+client.jsonOut$.subscribe((response)=>{console.log('initiator jsonOut',response)})
 client.error$.subscribe((x)=>{console.log(x)})
 // dupa.fixIn$.subscribe((response)=>{console.log('dupa fixIn',response)})
 // dupa.fixOut$.subscribe((response)=>{console.log('dupa fixOut',response)})

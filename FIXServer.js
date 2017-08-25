@@ -17,8 +17,10 @@ exports.FIXServer = function(opt) {
     this.logoff$ = new Subject
     this.fixIn$ = new Subject
     this.dataIn$ = new Subject
+    this.jsonIn$ = new Subject
     this.fixOut$ = new Subject
     this.dataOut$ = new Subject
+    this.jsonOut$ = new Subject
     this.end$ = new Subject
     this.close$ = new Subject
     this.error$ = new Subject
@@ -44,6 +46,9 @@ exports.FIXServer = function(opt) {
         var fixOut$ = Observable.fromEvent(fixSession, 'fixOut')
         fixOut$.subscribe(self.fixOut$)
 
+        var jsonOut$ = fixOut$.map(fixutil.convertToJSON)
+        jsonOut$.subscribe(self.jsonOut$)
+
         var end$ = Observable.fromEvent(connection, 'end')
             .map((x)=>{ return senderId })
         end$.subscribe(self.end$)
@@ -63,6 +68,9 @@ exports.FIXServer = function(opt) {
             .flatMap((raw) => { return frameDecoder.decode(raw)})
         fixIn$.subscribe(self.fixIn$)
 
+        var jsonIn$ = fixIn$.map(fixutil.convertToJSON)
+        jsonIn$.subscribe(self.jsonIn$)
+        
         var dataIn$ = fixIn$
             .map((msg) => {
                 return {msg: fixSession.decode(msg), senderId: senderId}

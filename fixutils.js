@@ -89,9 +89,10 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
 var convertToMap = exports.convertToMap = function(msg) {
     var fix = {}
     var keyvals = msg.split(SOHCHAR)
-        .map((x)=>{ return x.split('=')})
-
-    for(var i = 0; i < keyvals.length; ){
+        .map( (x)=> x.split('=') )
+    
+    var i = 0;
+    while( i < keyvals.length ){
         var pair = keyvals[i]
         if(pair.length === 2){
             var repeatinGroup = fixRepeatingGroups[pair[0]]
@@ -120,9 +121,10 @@ var convertToMap = exports.convertToMap = function(msg) {
 var convertToJSON = exports.convertToJSON = function(msg) {
     var fix = {}
     var keyvals = msg.split(SOHCHAR)
-        .map((x)=>{ return x.split('=')})
+        .map( (x)=> x.split('=') )
 
-    for(var i = 0; i < keyvals.length; ){
+    var i = 0;
+    while( i < keyvals.length ){
         var pair = keyvals[i]
         if(pair.length === 2){
             var repeatinGroup = fixRepeatingGroups[pair[0]]

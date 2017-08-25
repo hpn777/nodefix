@@ -1,5 +1,6 @@
 var util = require('util');
 var fs = require('fs');
+const { Observable } = require('rx');
 var storage = require('node-persist');
 var fixutil = require('../fixutils.js');
 var _  = require('underscore');
@@ -176,7 +177,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         else if (msgSeqNum < session.incomingSeqNum) {
             //ignore posdup
             if (fix['43'] === 'Y') {
-                return Observable.empty()
+                return Observable.never()
             }
             //if not posdup, error
             else {

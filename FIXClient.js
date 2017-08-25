@@ -99,21 +99,25 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
         var rawIn$ = Observable.fromEvent(self.connection, 'data')
         var fixIn$ = rawIn$
             .flatMap((raw) => { return frameDecoder.decode(raw)})
+            .catch((ex)=>{
+                self.connection.emit('error', ex)
+                return Observable.never()
+            })
+            .share()
         fixIn$.subscribe(self.fixIn$)
         
-        var jsonIn$ = fixIn$.map(fixutil.convertToJSON)
-        jsonIn$.subscribe(self.jsonIn$)
-
         var dataIn$ = fixIn$
             .map((msg) => { return fixSession.decode(msg)})
             .catch((ex)=>{
                 self.connection.emit('error', ex)
-                return Observable.empty()}
-            )
+                return Observable.never()
+            })
             .share()
         dataIn$.subscribe(self.dataIn$)
-
         dataIn$.subscribe()
+
+        var jsonIn$ = fixIn$.map(fixutil.convertToJSON)
+        jsonIn$.subscribe(self.jsonIn$)
     }
     
     var reconnect = function () {

@@ -112,14 +112,14 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
             	//==send heartbeats
             	if (currentTime - timeOfLastOutgoing > heartbeatInMilliSeconds && sendHeartbeats) {
-            		self._send({
+            		self.send({
             			'35': '0'
             		}); //heartbeat
             	}
 
             	//==ask counter party to wake up
             	if (currentTime - timeOfLastIncoming > (heartbeatInMilliSeconds * 1.5) && expectHeartbeats) {
-            		self._send({
+            		self.send({
             			'35': '1',
             			'112': testRequestID++
             		}); //test req id
@@ -143,7 +143,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             self.emit('logon', targetCompID);
             //==Logon ack (acceptor)
             if (isAcceptor && respondToLogon) {
-                self._send(fix);
+                self.send(fix);
             }
 
         } // End Process logon==
@@ -221,7 +221,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         //==Process test request
         if (msgType === '1') {
             var testReqID = fix['112'];
-            self._send({
+            self.send({
                 '35': '0',
                 '112': testReqID
             });
@@ -239,7 +239,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 fixClient.connection.destroy();
                 self.resetFIXSession(false)
             } else {
-                self._send(fix);
+                self.send(fix);
             }
 
             self.emit('logoff', senderCompID, targetCompID);
@@ -277,12 +277,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         this.send(logoffmsg)
         isLogoutRequested = true
     }
-
-    this.send = function (fix) {
-        this.emit('dataOut', fix)
-
-        this._send(fix)
-    }
         
     this.logToFile = function(raw){
         if (file === null) {
@@ -310,6 +304,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
 
     this.resetFIXSession = function(clearHistory){
+        session = retriveSession(senderCompID, targetCompID)
         session.incomingSeqNum = 1
         session.isLoggedIn = false
        
@@ -342,45 +337,45 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 if((!BeginSeqNo || BeginSeqNo <= _seqNo) && (!EndSeqNo || BeginSeqNo <= _seqNo)){
                     if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
                         //send seq-reset with gap-fill Y
-                        self._send({
+                        self.send({
                             '35': '4',
                             '123': 'Y',
                             '36': _seqNo
                         });
                     } else {
                         //send msg w/ posdup Y
-                        self._send(_.extend(_fix, {
+                        self.send(_.extend(_fix, {
                             '43': 'Y'
                         }));
                     }
                 }
     		});
     	}
-    };
+    }
 
     this.requestResend = function(){
         if (isResendRequested === false) {
             isResendRequested = true;
             //send resend-request
-            self._send({
+            self.send({
                 '35': '2',
                 '7': session.incomingSeqNum,
                 '16': '0'
             });
         }
     }
-    this._send = function(msg){
+
+    this.send = function(msg){
         var outmsg = fixutil.convertToFIX(msg, fixVersion,  fixutil.getUTCTimeStamp(),
             senderCompID,  targetCompID,  session.outgoingSeqNum, senderSubID);
 		
         session.outgoingSeqNum++
         timeOfLastOutgoing = new Date().getTime();
         
+        self.emit('dataOut', msg)
         self.emit('fixOut', outmsg)
 
-        if (fileLogging && msg['123'] !== 'Y' && msg['43'] !== 'Y' ) {
-        	self.logToFile(outmsg);
-        }
+        self.logToFile(outmsg);
         
         fixClient.connection.write(outmsg);
         saveSession()

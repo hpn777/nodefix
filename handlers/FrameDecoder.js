@@ -7,7 +7,7 @@ const SOHCHAR = String.fromCharCode(1)
 const ENDOFTAG8 = 10
 const SIZEOFTAG10 = 8
 const ENDOFMSGSTR = SOHCHAR + '10='
-
+const indexOfTag10SOHCHAR = 7
 exports.FrameDecoder = function($){
     var buffer = '';
     var self = this;
@@ -26,10 +26,7 @@ exports.FrameDecoder = function($){
 
             var bodyLength
             var idxOfEndOfTag10 = buffer.indexOf(ENDOFMSGSTR)
-            if(idxOfEndOfTag10 === -1){
-                return Observable.empty()
-            }
-            else{//Message received!
+            if(idxOfEndOfTag10 !== -1 && buffer[idxOfEndOfTag10 + indexOfTag10SOHCHAR] === SOHCHAR){
                 var msgLength = idxOfEndOfTag10 + SIZEOFTAG10;
                 var msg = buffer.substring(0, msgLength);
 		
@@ -39,6 +36,9 @@ exports.FrameDecoder = function($){
                 else {
                     buffer = buffer.substring(msgLength)
                 }
+            }
+            else{//Message received!
+                return Observable.empty()
             }
             //====================================Step 2: Validate message====================================
 

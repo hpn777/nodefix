@@ -321,7 +321,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.resendMessages = function (BeginSeqNo, EndSeqNo) {
     	if (this.logfilename) {
             BeginSeqNo = BeginSeqNo ? Number(BeginSeqNo) : undefined
-    		EndSeqNo = EndSeqNo ? Number(EndSeqNo) : undefined
+    		EndSeqNo = EndSeqNo ? Number(EndSeqNo) : session.outgoingSeqNum
     		var reader = fs.createReadStream(this.logfilename, {
     			'flags': 'r',
     			'encoding': 'binary',
@@ -334,7 +334,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     			var _msgType = _fix[35];
                 var _seqNo = Number(_fix[34]);
                 
-                if((!BeginSeqNo || BeginSeqNo <= _seqNo) && (!EndSeqNo || BeginSeqNo <= _seqNo)){
+                if((!BeginSeqNo || BeginSeqNo <= _seqNo) && (EndSeqNo >= _seqNo)){
                     if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
                         //send seq-reset with gap-fill Y
                         self.send({
@@ -348,6 +348,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                             '43': 'Y'
                         }));
                     }
+                }
+                else if(EndSeqNo >= _seqNo){
+                    reader.close()
                 }
     		});
     	}

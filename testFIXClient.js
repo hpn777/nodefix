@@ -23,14 +23,15 @@ var client = new FIXClient("FIX.4.2", "initiator", "acceptor", { resetSeqNumOnRe
 // var dupa = new FIXClient("FIX.4.2", "dupa", "acceptor", {resetSeqNumOnReconect: false})
 // var cipa = new FIXClient("FIX.4.2", "cipa", "acceptor", {resetSeqNumOnReconect: false})
 
+client.resetFIXSession(false)
 
 client.connect(1234,'localhost');
 // dupa.connect(1234,'localhost');
 // cipa.connect(1234,'localhost');
 
 //client.dataIn$.subscribe((response)=>{console.log('dataIn',response)})
-client.jsonIn$.subscribe((response)=>{console.log('initiator jsonIn',response)})
-client.jsonOut$.subscribe((response)=>{console.log('initiator jsonOut',response)})
+client.jsonIn$.subscribe((response)=>{if(response.GapFillFlag != 'Y') console.log('initiator jsonIn',response)})
+client.jsonOut$.subscribe((response)=>{if(response.GapFillFlag != 'Y') console.log('initiator jsonOut',response)})
 client.error$.subscribe((x)=>{console.log(x)})
 // dupa.fixIn$.subscribe((response)=>{console.log('dupa fixIn',response)})
 // dupa.fixOut$.subscribe((response)=>{console.log('dupa fixOut',response)})
@@ -38,3 +39,8 @@ client.error$.subscribe((x)=>{console.log(x)})
 // cipa.fixIn$.subscribe((response)=>{console.log('cipa fixIn',response)})
 // cipa.fixOut$.subscribe((response)=>{console.log('cipa fixOut',response)})
 // cipa.error$.subscribe((x)=>{console.log(x)})
+
+process.on('SIGINT', function() {
+    client.logoff()
+    setTimeout(() => {process.exit() }, 1000)
+});

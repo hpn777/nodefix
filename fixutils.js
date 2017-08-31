@@ -33,57 +33,41 @@ var convertRawToFIX = exports.convertRawToFIX = function(map){
     return convertToFIX(map, map[8], map[52], map[49], map[56], map[34], map[50]);
 }
 
-var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp, senderCompID, targetCompID, outgoingSeqNum, senderSubID){
-    //defensive copy
-	var msg = msgraw;
-
-    delete msg['9']; //bodylength
-    delete msg['10']; //checksum
-
-    var headermsgarr = [];
-    var bodymsgarr = [];
-    //var trailermsgarr = [];
-
-    headermsgarr.push('35=' + msg['35'] , SOHCHAR);
-    headermsgarr.push('52=' + timeStamp , SOHCHAR);
-    headermsgarr.push('49=' + (msg['49'] || senderCompID) , SOHCHAR);
+var convertToFIX = exports.convertToFIX = function(msg, fixVersion, timeStamp, senderCompID, targetCompID, outgoingSeqNum, senderSubID){
+    fixVersion = msg['8'] || fixVersion;
+    var fixMessage = '';
+    fixMessage += '35=' + msg['35'] + SOHCHAR;
+    fixMessage += '52=' + timeStamp + SOHCHAR;
+    fixMessage += '49=' + (msg['49'] || senderCompID) + SOHCHAR;
     if(senderSubID)
-        headermsgarr.push('50=' + (msg['50'] || senderSubID) , SOHCHAR);
-    headermsgarr.push('56=' + (msg['56'] || targetCompID) , SOHCHAR);
-    headermsgarr.push('34=' + outgoingSeqNum , SOHCHAR);
+        fixMessage += '50=' + (msg['50'] || senderSubID) + SOHCHAR;
+    fixMessage += '56=' + (msg['56'] || targetCompID) + SOHCHAR;
+    fixMessage += '34=' + outgoingSeqNum + SOHCHAR;
+
+    ['8', '9', '35', '10', '52', '49', '50', '56', '34'].forEach((x)=>{ delete msg[x] })
 
     _.each(msg, (item, tag) => {
-        if (['8', '9', '35', '10', '52', '49', '50', '56', '34'].indexOf(tag) === -1 ) {
-            if(Array.isArray(item)){
-                bodymsgarr.push(tag, '=' , item.length , SOHCHAR)
-                item.forEach((group)=>{
-                    _.each(group, (item, tag) => {
-                        bodymsgarr.push(tag, '=' , item , SOHCHAR)
-                    })
+        if(Array.isArray(item)){
+            fixMessage += tag + '=' + item.length + SOHCHAR
+            item.forEach((group)=>{
+                _.each(group, (item, tag) => {
+                    fixMessage += tag + '=' + item + SOHCHAR
                 })
-            }
-            else{
-                bodymsgarr.push(tag, '=' , item , SOHCHAR)
-            }
+            })
+        }
+        else{
+            fixMessage += tag + '=' + item + SOHCHAR
         }
     })
 
-    var headermsg = headermsgarr.join('');
-    //var trailermsg = trailermsgarr.join('');
-    var bodymsg = bodymsgarr.join('');
+    const messageLength = fixMessage.length
 
-    var outmsgarr = [];
-    outmsgarr.push('8=', msg['8'] || fixVersion, SOHCHAR);
-    outmsgarr.push('9=' , (headermsg.length + bodymsg.length) , SOHCHAR);
-    outmsgarr.push(headermsg);
-    outmsgarr.push(bodymsg);
-    //outmsgarr.push(trailermsg);
+    fixMessage = '9=' + messageLength + SOHCHAR + fixMessage
+    fixMessage = '8=' + fixVersion + SOHCHAR + fixMessage
 
-    var outmsg = outmsgarr.join('');
-
-    outmsg += '10=' + checksum(outmsg) + SOHCHAR;
+    fixMessage += '10=' + checksum(fixMessage) + SOHCHAR;
         
-    return outmsg;
+    return fixMessage;
 }
 
 var convertToMap = exports.convertToMap = function(msg) {
@@ -96,7 +80,7 @@ var convertToMap = exports.convertToMap = function(msg) {
         var pair = keyvals[i]
         if(pair.length === 2){
             var repeatinGroup = fixRepeatingGroups[pair[0]]
-            if(!repeatinGroup){
+            if(repeatinGroup === undefined){
                 fix[pair[0]] = pair[1]
                 i++
             }
@@ -128,7 +112,7 @@ var convertToJSON = exports.convertToJSON = function(msg) {
         var pair = keyvals[i]
         if(pair.length === 2){
             var repeatinGroup = fixRepeatingGroups[pair[0]]
-            if(!repeatinGroup){
+            if(repeatinGroup === undefined){
                 fix[resolveKey(pair[0])] = pair[1]
                 i++
             }

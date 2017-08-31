@@ -2,8 +2,8 @@ var fix = require('./fix.js');
 var {FIXServer} = require("./FIXServer.js");
 
 var server = new FIXServer({resetSeqNumOnReconect: false})
-server.jsonIn$.subscribe((x)=>{console.log('jsonIn', x)})
-server.jsonOut$.subscribe((x)=>{console.log('jsonOut', x)})
+server.jsonIn$.subscribe((x)=>{if(x.msg.GapFillFlag != 'Y') console.log('jsonIn', x)})
+server.jsonOut$.subscribe((x)=>{if(x.msg.GapFillFlag != 'Y') console.log('jsonOut', x)})
 server.error$.subscribe((x)=>{console.log(x)})
 server.listen(1234, "localhost")
 // client.connectAndLogon(1234,'localhost');

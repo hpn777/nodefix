@@ -1,5 +1,6 @@
 var util = require('util');
 var fs = require('fs');
+var readline = require('readline')
 const { Observable } = require('rx');
 var storage = require('node-persist');
 var fixutil = require('../fixutils.js');
@@ -181,12 +182,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }
             //if not posdup, error
             else {
-                logoffmsg = { '8': fixVersion, '49': senderCompID, '56': targetCompID, '35': 5, '58': 'sequence number lower than expected' };
-                
-                if(senderSubID)
-                    logoffmsg['50'] = senderSubID
-                
-                self.send(logoffmsg)
+                self.logoff('sequence number lower than expected')
 
                 var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + session.incomingSeqNum+ ') : ' + raw;
                 throw new Error(error)
@@ -195,10 +191,10 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         }
         //greater than expected
         else {
-            //is it resend request?
-        	if (msgType === '2' && fileLogging) {
-        		self.resendMessages(fix['7'], fix['16'])
-            }
+            // //is it resend request?
+        	// if (msgType === '2' && fileLogging) {
+        	// 	self.resendMessages(fix['7'], fix['16'])
+            // }
             //did we already send a resend request?
             self.requestResend()
         }
@@ -243,7 +239,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }
 
             self.emit('logoff', senderCompID, targetCompID);
-            fixClient.connection.destroy()//will close connection and force to save the state to disk
         }
 
         saveSession()
@@ -273,7 +268,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
 
     this.logoff = function (logoffReason) {
-    	logoffmsg = { '35': 5, '58': logoffReason };
+    	logoffmsg = { '35': 5, '58': logoffReason || '' };
         this.send(logoffmsg)
         isLogoutRequested = true
     }
@@ -320,21 +315,24 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
     this.resendMessages = function (BeginSeqNo, EndSeqNo) {
     	if (this.logfilename) {
-            BeginSeqNo = BeginSeqNo ? Number(BeginSeqNo) : undefined
-    		EndSeqNo = EndSeqNo ? Number(EndSeqNo) : session.outgoingSeqNum
+            BeginSeqNo = BeginSeqNo ? Number(BeginSeqNo) : 0
+    		EndSeqNo = Number(EndSeqNo) ? Number(EndSeqNo) : session.outgoingSeqNum
     		var reader = fs.createReadStream(this.logfilename, {
     			'flags': 'r',
     			'encoding': 'binary',
     			'mode': 0666,
     			'bufferSize': 4 * 1024
-    		})
-    		//TODO full lines may not be read
-    		reader.addListener("data", function (chunk) {
-    			var _fix = fixutil.convertToMap(chunk);
+            })
+            console.log('++++++++++++++++++ resending shit')
+            var lineReader = readline.createInterface({
+                input: reader
+            })
+
+            lineReader.on('line', (line) => {
+                var _fix = fixutil.convertToMap(line);
     			var _msgType = _fix[35];
                 var _seqNo = Number(_fix[34]);
-                
-                if((!BeginSeqNo || BeginSeqNo <= _seqNo) && (EndSeqNo >= _seqNo)){
+                if((BeginSeqNo <= _seqNo) && ( EndSeqNo >= _seqNo)){
                     if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
                         //send seq-reset with gap-fill Y
                         self.send({
@@ -345,14 +343,16 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                     } else {
                         //send msg w/ posdup Y
                         self.send(_.extend(_fix, {
-                            '43': 'Y'
+                            '43': 'Y',
+                            '36': _seqNo
                         }));
                     }
                 }
-                else if(EndSeqNo >= _seqNo){
+                else if(EndSeqNo > _seqNo){
+                    lineReader.removeAllListeners('line')
                     reader.close()
                 }
-    		});
+            })
     	}
     }
 

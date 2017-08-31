@@ -148,22 +148,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }
 
         } // End Process logon==
-        
-        // if (fileLogging) {
-        // 	self.logToFile(raw);
-        // }
-
-        //==Process seq-reset (no gap-fill)
-        if (msgType === '4' && fix['123'] === undefined || fix['123'] === 'N') {
-            var resetseqnostr = fix['36'];
-            var resetseqno = parseInt(resetseqnostr, 10);
-            if (resetseqno >= session.incomingSeqNum) {
-                session.incomingSeqNum = resetseqno
-            } else {
-                var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                throw new Error(error)
-            }
-        }
 
         //==Check sequence numbers
         var msgSeqNumStr = fix['34'];
@@ -199,46 +183,52 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             self.requestResend()
         }
 
-        //==Process sequence-reset with gap-fill
-        if (msgType === '4' && fix['123'] === 'Y') {
-            var newSeqNoStr = fix['36'];
-            var newSeqNo = parseInt(newSeqNoStr, 10);
+        switch(msgType){
+            case '1'://==Process test request
+                var testReqID = fix['112'];
+                self.send({
+                    '35': '0',
+                    '112': testReqID
+                });
+                break;
+            case '2'://==Process resend-request
+                self.resendMessages(fix['7'], fix['16']);
+                break;
+            case '4':
+                //==Process sequence-reset with gap-fill
+                if (fix['123'] === 'Y') {
+                    var newSeqNoStr = fix['36'];
+                    var newSeqNo = parseInt(newSeqNoStr, 10);
 
-            if (newSeqNo >= session.incomingSeqNum) {
-                session.incomingSeqNum = newSeqNo;
-            } else {
-                var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                throw new Error(error)
-            }
-        }
+                    if (newSeqNo >= session.incomingSeqNum) {
+                        session.incomingSeqNum = newSeqNo;
+                    } else {
+                        var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
+                        throw new Error(error)
+                    }
+                }
+                //==Process seq-reset (no gap-fill)
+                else{
+                    var resetseqnostr = fix['36'];
+                    var resetseqno = parseInt(resetseqnostr, 10);
+                    if (resetseqno >= session.incomingSeqNum) {
+                        session.incomingSeqNum = resetseqno
+                    } else {
+                        var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
+                        throw new Error(error)
+                    }
+                }
+                break;
+            case '5'://==Process logout
+                if (isLogoutRequested) {
+                    fixClient.connection.destroy();
+                    self.resetFIXSession(false)
+                } else {
+                    self.send(fix);
+                }
 
-        //==Check compids and version
-        //TODO
-        //==Process test request
-        if (msgType === '1') {
-            var testReqID = fix['112'];
-            self.send({
-                '35': '0',
-                '112': testReqID
-            });
-        }
-
-        //==Process resend-request
-        if (msgType === '2') {
-        	self.resendMessages(fix['7'], fix['16']);
-        }
-
-        //==Process logout
-        if (msgType === '5') {
-            
-            if (isLogoutRequested) {
-                fixClient.connection.destroy();
-                self.resetFIXSession(false)
-            } else {
-                self.send(fix);
-            }
-
-            self.emit('logoff', senderCompID, targetCompID);
+                self.emit('logoff', senderCompID, targetCompID);
+                break;
         }
 
         saveSession()

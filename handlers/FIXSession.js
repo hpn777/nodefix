@@ -223,6 +223,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         if(options.userID && options.password){
             logonmsg['553'] = options.userID
             logonmsg['554'] = options.password
+            logonmsg['95'] = options.password.length
             logonmsg['96'] = options.password
         }
             

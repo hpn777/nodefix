@@ -18,6 +18,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var senderCompID = options.senderCompID;
     var senderSubID = options.senderSubID;
     var targetCompID = options.targetCompID;
+    var targetSubID =  options.targetSubID;
+    var senderLocationID = options.senderLocationID;
     var key = options.senderCompID + '-' + options.targetCompID
 
     var isDuplicateFunc = _.isUndefined(options.isDuplicateFunc)? function (senderId, targetId) {
@@ -36,7 +38,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         return sessions[key]
     } : options.retriveSession;
     
-    var saveSession = _.debounce(()=>{
+    var saveSession = _.throttle(()=>{
         storage.setItemSync(key, session)
     }, 100)
 
@@ -82,6 +84,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 senderCompID = fix['56']
                 senderSubID = fix['50']
                 targetCompID = fix['49']
+                targetSubID = fix['57']
                 //==Check duplicate connections
                 if (isDuplicateFunc(senderCompID, targetCompID)) {
                     var error = '[ERROR] Session already logged in:' + raw;
@@ -164,10 +167,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 }
                 //if not posdup, error
                 else {
-                    self.logoff('sequence number lower than expected')
-
-                    var error = '[ERROR] Incoming sequence number ('+msgSeqNum+') lower than expected (' + session.incomingSeqNum+ ') : ' + raw;
-                    throw new Error(error)
+                    var error = '[ERROR] Incoming sequence number ['+msgSeqNum+'] lower than expected [' + session.incomingSeqNum+ ']'
+                    self.logoff(error)
+                    throw new Error(error + ' : ' + raw)
                 }
             }
             //greater than expected
@@ -191,16 +193,17 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 //==Process sequence-reset
                 var resetseqno = Number(fix['36'])
                 if(resetseqno !== NaN){
-                    resetseqno++
                     if (resetseqno >= session.incomingSeqNum) {
                         session.incomingSeqNum = resetseqno
                     } else {
-                        var error = '[ERROR] Seq-reset may not decrement sequence numbers: ' + raw;
-                        throw new Error(error)
+                        var error = '[ERROR] Seq-reset may not decrement sequence numbers' 
+                        // self.logoff(error)
+                        // throw new Error(error + ' : ' + raw)
                     }
                 } else {
-                    var error = '[ERROR] Seq-reset has invalid sequence numbers: ' + raw;
-                    throw new Error(error)
+                    var error = '[ERROR] Seq-reset has invalid sequence numbers'
+                    self.logoff(error)
+                    throw new Error(error + ' : ' + raw)
                 }
                 break;
             case '5'://==Process logout
@@ -220,13 +223,6 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.logon = function (logonmsg) {
         logonmsg = !logonmsg ? { '35': 'A', '90': '0', '108': '10'} : logonmsg;
         
-        if(options.userID && options.password){
-            logonmsg['553'] = options.userID
-            logonmsg['554'] = options.password
-            logonmsg['95'] = options.password.length
-            logonmsg['96'] = options.password
-        }
-            
         //==Sync sequence numbers from data store
         if (resetSeqNumOnReconect) 
             session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
@@ -237,7 +233,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
 
     this.logoff = function (logoffReason) {
-    	logoffmsg = { '35': 5, '58': logoffReason || '' };
+    	logoffmsg = { '35': 5, '58': logoffReason || 'Graceful close' };
         this.send(logoffmsg)
         isLogoutRequested = true
     }
@@ -299,18 +295,20 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             lineReader.on('line', (line) => {
                 var _fix = fixutil.convertToMap(line);
     			var _msgType = _fix[35];
-                var _seqNo = Number(_fix[34]);
+                var _seqNo = Number(_fix[34]) +1;
                 if((BeginSeqNo <= _seqNo) && ( EndSeqNo >= _seqNo)){
                     if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
                         //send seq-reset with gap-fill Y
                         self.send({
                             '35': '4',
+                            '122': _fix[52],
                             '123': 'Y',
                             '36': _seqNo
                         }, true);
                     } else {
                         //send msg w/ posdup Y
                         self.send(_.extend(_fix, {
+                            '122': _fix[52],
                             '43': 'Y',
                             '36': _seqNo
                         }), true);
@@ -339,7 +337,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.send = function(msg, replay){
         var outgoingSeqNum = replay ? 1 : session.outgoingSeqNum
         var outmsg = fixutil.convertToFIX(msg, fixVersion,  fixutil.getUTCTimeStamp(),
-            senderCompID,  targetCompID,  outgoingSeqNum, senderSubID);
+            senderCompID,  targetCompID,  outgoingSeqNum, {senderSubID: senderSubID, targetSubID: targetSubID, senderLocationID: senderLocationID});
         
         
         self.emit('dataOut', msg)

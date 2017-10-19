@@ -4,10 +4,12 @@ var { Observable } = require('rx')
 
 //static vars
 const SOHCHAR = String.fromCharCode(1)
+var re = new RegExp(SOHCHAR, "g")
 const ENDOFTAG8 = 10
+const STARTOFTAG9VAL = ENDOFTAG8 + 2;
 const SIZEOFTAG10 = 8
 const ENDOFMSGSTR = SOHCHAR + '10='
-const indexOfTag10SOHCHAR = 7
+//const indexOfTag10SOHCHAR = 7
 exports.FrameDecoder = function($){
     var buffer = '';
     var self = this;
@@ -24,13 +26,16 @@ exports.FrameDecoder = function($){
                 return Observable.empty()
             }
 
-            var bodyLength
+            var idxOfEndOfTag9 = Number(buffer.substring(ENDOFTAG8).indexOf(SOHCHAR)) + ENDOFTAG8;
+            var bodyLength = Number(buffer.substring(STARTOFTAG9VAL, idxOfEndOfTag9));
+
             var idxOfEndOfTag10 = buffer.indexOf(ENDOFMSGSTR)
-            if(idxOfEndOfTag10 !== -1 && buffer[idxOfEndOfTag10 + indexOfTag10SOHCHAR] === SOHCHAR){
-                var msgLength = idxOfEndOfTag10 + SIZEOFTAG10;
+            var msgLength = bodyLength + idxOfEndOfTag9 + SIZEOFTAG10
+            if(!isNaN(msgLength) && buffer.length >= msgLength){
+                //var msgLength = idxOfEndOfTag10 + SIZEOFTAG10;
                 var msg = buffer.substring(0, msgLength);
 		
-                if (msgLength == buffer.length) {
+                if (msgLength === buffer.length) {
                     buffer = '';
                 }
                 else {
@@ -47,7 +52,7 @@ exports.FrameDecoder = function($){
 
             if (calculatedChecksum !== extractedChecksum) {
                 var error = '[WARNING] Discarding message because body length or checksum are wrong (expected checksum: '
-                    + calculatedChecksum + ', received checksum: ' + extractedChecksum + '): [' + msg + ']'
+                    + calculatedChecksum + ', received checksum: ' + extractedChecksum + '): [' + msg.replace(re, '|') + ']'
                 throw new Error(error)
             }
 

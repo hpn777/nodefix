@@ -110,6 +110,7 @@ exports.FIXClient = function(fixVersion, senderCompID, targetCompID, opt) {//{re
             .map((msg) => { return fixSession.decode(msg)})
             .catch((ex)=>{
                 self.connection.emit('error', ex)
+                console.log('epic fail',ex)
                 return Observable.never()
             })
             .share()

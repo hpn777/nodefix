@@ -4,6 +4,10 @@ const { fixRepeatingGroups } = require('./resources/fixSchema')
 const { resolveKey } = require('./resources/fixtagnums')
 
 var SOHCHAR = exports.SOHCHAR = String.fromCharCode(1);
+
+
+exports.setSOHCHAR = function(char){ SOHCHAR = char }
+
 exports.getUTCTimeStamp = function(){ return moment.utc().format('YYYYMMDD-HH:mm:ss.SSS'); }
 
 var checksum = exports.checksum = function(str){
@@ -93,7 +97,7 @@ var convertToFIX = exports.convertToFIX = function(msgraw, fixVersion, timeStamp
 var convertToKeyvals = function(msg){
     var keyvals = []
     var cursor = 0
-
+    
     while(cursor < msg.length){
         var nextPipe
         var i = cursor
@@ -113,7 +117,7 @@ var convertToKeyvals = function(msg){
         if(pair[0] === '212'){
             var xmlPair = ['213']
             var xmlLength = Number(pair[1]) + 5
-            xmlPair[1] = msg.slice(cursor + 4, xmlLength - 1)
+            xmlPair[1] = msg.slice(cursor + 4, cursor + xmlLength - 1)
             keyvals.push(xmlPair)
             cursor += xmlLength
         }
@@ -157,7 +161,7 @@ var convertToMap = exports.convertToMap = function(msg) {
 var convertToJSON = exports.convertToJSON = function(msg) {
     var fix = {}
     var keyvals = convertToKeyvals(msg)
-
+    
     var i = 0;
     while( i < keyvals.length ){
         var pair = keyvals[i]
@@ -171,7 +175,7 @@ var convertToJSON = exports.convertToJSON = function(msg) {
                 var nr = Number(pair[1])
                 if(nr){
                     var response = repeatingGroupToJSON(repeatinGroup, nr, keyvals.slice(i+1))
-                    fix[pair[0]] = response.repeatingGroup
+                    fix[resolveKey(pair[0])] = response.repeatingGroup
                     i += (1 + response.length)
                 }
                 else{

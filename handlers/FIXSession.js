@@ -52,6 +52,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     var heartbeatIntervalID;
     var timeOfLastIncoming = new Date().getTime();
     var timeOfLastOutgoing = new Date().getTime();
+    var timeOfLastOutgoingHeartbeat = new Date().getTime();
     var testRequestID = 1;
     
     var session = {'incomingSeqNum': 1, 'outgoingSeqNum': 1}
@@ -69,7 +70,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         var msgType = fix['35'];
 
         //==Confirm first msg is logon==
-        if (!session.isLoggedIn && msgType !== 'A') {
+        if (!session.isLoggedIn && (msgType !== 'A' && msgType !== '5')) {
             var error = '[ERROR] First message must be logon:' + raw;
             throw new Error(error)
         }
@@ -111,12 +112,13 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         	//==Set heartbeat mechanism
             heartbeatIntervalID = setInterval(function () {
             	var currentTime = new Date().getTime();
-
+		
             	//==send heartbeats
-            	if (currentTime - timeOfLastOutgoing > heartbeatInMilliSeconds && sendHeartbeats) {
+            	if (currentTime - timeOfLastOutgoingHeartbeat > heartbeatInMilliSeconds && sendHeartbeats) {
             		self.send({
             			'35': '0'
-            		}); //heartbeat
+                    }); //heartbeat
+                    timeOfLastOutgoingHeartbeat = new Date().getTime()
             	}
 
             	//==ask counter party to wake up
@@ -150,7 +152,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 
         } // End Process logon==
 
-        if(msgType !== '4'){
+        if(msgType !== '4' && msgType !== '5'){
             //==Check sequence numbers
             var msgSeqNum = Number(fix['34'])
             //expected sequence number
@@ -211,7 +213,8 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                     self.send(_.extend({}, fix));
 
                 setImmediate(()=>{fixClient.connection.destroy()})
-                self.resetFIXSession(false)
+                session.isLoggedIn = false
+                //self.resetFIXSession(false)
                 self.emit('logoff', senderCompID, targetCompID);
                 break;
         }
@@ -235,6 +238,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     this.logoff = function (logoffReason) {
     	logoffmsg = { '35': 5, '58': logoffReason || 'Graceful close' };
         this.send(logoffmsg)
+        session.isLoggedIn = false
         isLogoutRequested = true
     }
         
@@ -257,6 +261,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             file.on('error', function (error) { fixClient.connection.emit('error', error) });
             fixClient.connection.on('close', function () {
                 file.close()
+		file = null
             });
         }
 
@@ -343,7 +348,9 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
         self.emit('dataOut', msg)
         self.emit('fixOut', outmsg)
 
-        fixClient.connection.write(outmsg);
+        if(fixClient.connection)
+            fixClient.connection.write(outmsg)
+            
         if(!replay){
             timeOfLastOutgoing = new Date().getTime();
             session.outgoingSeqNum++

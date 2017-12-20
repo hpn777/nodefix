@@ -1,6 +1,7 @@
 var fixutil = require('../fixutils.js');
 var util = require('util');
 var { Observable } = require('rx')
+const _ = require('lodash')
 
 //static vars
 const SOHCHAR = String.fromCharCode(1)
@@ -16,8 +17,8 @@ exports.FrameDecoder = function($){
 
     this.decode = (data) => {
         buffer = buffer + data.toString();
-		var messages = []
-
+        var messages = []
+        
         while (buffer.length > 0) {
             //====================================Step 1: Extract complete FIX message====================================
 
@@ -31,6 +32,7 @@ exports.FrameDecoder = function($){
 
             var idxOfEndOfTag10 = buffer.indexOf(ENDOFMSGSTR)
             var msgLength = bodyLength + idxOfEndOfTag9 + SIZEOFTAG10
+
             if(!isNaN(msgLength) && buffer.length >= msgLength){
                 //var msgLength = idxOfEndOfTag10 + SIZEOFTAG10;
                 var msg = buffer.substring(0, msgLength);
@@ -43,7 +45,7 @@ exports.FrameDecoder = function($){
                 }
             }
             else{//Message received!
-                return Observable.never()
+                return Observable.fromArray(messages)
             }
             //====================================Step 2: Validate message====================================
 
@@ -55,10 +57,10 @@ exports.FrameDecoder = function($){
                     + calculatedChecksum + ', received checksum: ' + extractedChecksum + '): [' + msg.replace(re, '|') + ']'
                 throw new Error(error)
             }
+            
+            messages.push(msg)
+        }
 
-			messages.push(msg)
-			//return msg
-		}
-		return Observable.fromArray(messages)
+        return Observable.fromArray(messages)
     }
 }

@@ -151,18 +151,16 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             }
 
         } // End Process logon==
+	
+        const msgSeqNum = Number(fix['34'])        
 
         if(msgType !== '4' && msgType !== '5'){
             //==Check sequence numbers
-            var msgSeqNum = Number(fix['34'])
-            //expected sequence number
-            if (msgSeqNum === session.incomingSeqNum) {
-                
-                session.incomingSeqNum++;
+            if (msgSeqNum >= requestResendTargetSeqNum) {
                 isResendRequested = false;
-            }
+            }	    
             //less than expected
-            else if (msgSeqNum < session.incomingSeqNum) {
+            if (msgSeqNum < session.incomingSeqNum && !isResendRequested) {
                 //ignore posdup
                 if (fix['43'] === 'Y') {
                     return Observable.never()
@@ -175,17 +173,20 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 }
             }
             //greater than expected
-            else {
-                self.requestResend()
+            else if( msgSeqNum > session.incomingSeqNum && (requestResendTargetSeqNum == 0 || requestResendRequestedSeqNum !== requestResendTargetSeqNum)) {
+                self.requestResend(session.incomingSeqNum, msgSeqNum)
             }
+        }
+	
+	    if (msgType !== '4' && (msgSeqNum === session.incomingSeqNum || isResendRequested)) {
+            session.incomingSeqNum = msgSeqNum + 1;
         }
 
         switch(msgType){
             case '1'://==Process test request
-                var testReqID = fix['112'];
                 self.send({
                     '35': '0',
-                    '112': testReqID
+                    '112': fix['112']
                 });
                 break;
             case '2'://==Process resend-request
@@ -193,14 +194,21 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 break;
             case '4':
                 //==Process sequence-reset
-                var resetseqno = Number(fix['36'])
-                if(resetseqno !== NaN){
-                    if (resetseqno >= session.incomingSeqNum) {
-                        session.incomingSeqNum = resetseqno
+                var resetSeqNo = Number(fix['36'])
+                if(resetSeqNo !== NaN){
+                    if (resetSeqNo >= session.incomingSeqNum) {
+                        if(resetSeqNo == (requestResendTargetSeqNum + 1) && requestResendRequestedSeqNum !== requestResendTargetSeqNum){
+                            session.incomingSeqNum = requestResendRequestedSeqNum + 1
+                            isResendRequested = false
+                            self.requestResend(session.incomingSeqNum, requestResendTargetSeqNum)
+                        }
+                        else{
+                            session.incomingSeqNum = resetSeqNo
+                        }
                     } else {
                         var error = '[ERROR] Seq-reset may not decrement sequence numbers' 
                         // self.logoff(error)
-                        // throw new Error(error + ' : ' + raw)
+                        throw new Error(error + ' : ' + raw)
                     }
                 } else {
                     var error = '[ERROR] Seq-reset has invalid sequence numbers'
@@ -209,13 +217,17 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 }
                 break;
             case '5'://==Process logout
-                if (!isLogoutRequested)
+                if (!isLogoutRequested){
                     self.send(_.extend({}, fix));
+
+                    if(fix['789'])
+                        session.outgoingSeqNum = Number(fix['789'])
+		        }
 
                 setImmediate(()=>{fixClient.connection.destroy()})
                 session.isLoggedIn = false
-                //self.resetFIXSession(false)
-                self.emit('logoff', senderCompID, targetCompID);
+		        //self.resetFIXSession(false)
+                self.emit('logoff', {senderCompID:senderCompID, targetCompID: targetCompID, logoffReason: fix['58']});
                 break;
         }
 
@@ -236,7 +248,11 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     }
 
     this.logoff = function (logoffReason) {
-    	logoffmsg = { '35': 5, '58': logoffReason || 'Graceful close' };
+    	logoffmsg = { 
+            '35': 5, 
+            '58': logoffReason || 'Graceful close',
+            '789': session.incomingSeqNum
+        };
         this.send(logoffmsg)
         session.isLoggedIn = false
         isLogoutRequested = true
@@ -258,68 +274,94 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             catch(ex){}
 
             file = fs.createWriteStream(this.logfilename, { 'flags': 'a', 'mode': 0666 });
-            file.on('error', function (error) { fixClient.connection.emit('error', error) });
-            fixClient.connection.on('close', function () {
-                file.close()
-		file = null
+            file.on('error', function (error) { 
+                fixClient.connection.emit('error', error) 
             });
+
+            if(fixClient.connection){
+                fixClient.connection.on('close', function () {
+                    file.close()
+		            file = null
+                })
+            }
         }
 
 		file.write(raw + '\n');
     }
 
-    this.resetFIXSession = function(clearHistory){
+    this.resetFIXSession = function(newSession){
         session = retriveSession(senderCompID, targetCompID)
-        session.incomingSeqNum = 1
+        if(newSession.incomingSeqNum){
+	        session.incomingSeqNum = newSession.incomingSeqNum
+            session.isLoggedIn = false
+        }
+
         session.isLoggedIn = false
-       
+            
         try{ 
-            if(clearHistory){
-                session.outgoingSeqNum = 1
+            if(newSession.outgoingSeqNum){
+                session.outgoingSeqNum = newSession.outgoingSeqNum
                 fs.unlinkSync(this.logfilename)
             }
         }
         catch(ex){}
+
         saveSession()
     }
 
     this.resendMessages = function (BeginSeqNo, EndSeqNo) {
     	if (this.logfilename) {
             BeginSeqNo = BeginSeqNo ? Number(BeginSeqNo) : 0
-    		EndSeqNo = Number(EndSeqNo) ? Number(EndSeqNo) : session.outgoingSeqNum
+    		EndSeqNo = Number(EndSeqNo) ? Number(EndSeqNo) : (session.outgoingSeqNum -1)
     		var reader = fs.createReadStream(this.logfilename, {
     			'flags': 'r',
     			'encoding': 'binary',
-    			'mode': 0666,
-    			//'bufferSize': 4 * 1024
+    			'mode': 0666
             })
             var lineReader = readline.createInterface({
                 input: reader
             })
 
+
+            var fillGapBuffer = []
+            const sendFillGap = ()=>{
+                if(fillGapBuffer.length > 0){
+                    self.send({
+                        '35': '4',
+                        '122': fillGapBuffer[0][52],
+                        '123': 'Y',
+                        '34': Number(fillGapBuffer[0][34]),
+                        '36': Number(fillGapBuffer[fillGapBuffer.length-1][34]) + 1
+                    }, true);
+                    fillGapBuffer = []
+                }
+            }
+
             lineReader.on('line', (line) => {
                 var _fix = fixutil.convertToMap(line);
     			var _msgType = _fix[35];
-                var _seqNo = Number(_fix[34]) +1;
+                var _seqNo = Number(_fix[34]);
                 if((BeginSeqNo <= _seqNo) && ( EndSeqNo >= _seqNo)){
                     if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
                         //send seq-reset with gap-fill Y
-                        self.send({
-                            '35': '4',
-                            '122': _fix[52],
-                            '123': 'Y',
-                            '36': _seqNo
-                        }, true);
+                        fillGapBuffer.push(_fix)
+                        
+                        if(EndSeqNo === _seqNo)
+                            sendFillGap()
                     } else {
+                        //send seq-reset with gap-fill Y
+                        sendFillGap()
                         //send msg w/ posdup Y
                         self.send(_.extend(_fix, {
                             '122': _fix[52],
                             '43': 'Y',
-                            '36': _seqNo
+                            '34': _seqNo,
+			                '36': _seqNo + 1
                         }), true);
                     }
                 }
                 else if(EndSeqNo < _seqNo){
+                    sendFillGap()
                     lineReader.removeAllListeners('line')
                     reader.close()
                 }
@@ -327,23 +369,41 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     	}
     }
 
-    this.requestResend = function(){
-        if (isResendRequested === false) {
+    var requestResendRequestedSeqNum = 0 
+    var requestResendTargetSeqNum = 0
+    this.requestResend = function(start, target){
+        requestResendTargetSeqNum = target
+        var batchSize = 2000
+        if (isResendRequested === false && start < requestResendTargetSeqNum) {
             isResendRequested = true;
-            //send resend-request
-            self.send({
-                '35': '2',
-                '7': session.incomingSeqNum,
-                '16': '0'
-            });
+
+            send = (from, to)=>{
+                self.send({
+                    '35': 2,
+                    '7': from,
+                    '16': to || 0
+                });
+            }
+
+            if(target - start <= batchSize){
+                requestResendRequestedSeqNum = requestResendTargetSeqNum = 0
+                send(start)
+            }
+            else {
+                requestResendRequestedSeqNum = start + batchSize
+                send(start, requestResendRequestedSeqNum)
+            }
         }
     }
 
     this.send = function(msg, replay){
-        var outgoingSeqNum = replay ? 1 : session.outgoingSeqNum
+        if(!replay){
+            msg['369'] = session.incomingSeqNum - 1
+        }
+
+        var outgoingSeqNum = replay ? msg['34'] : session.outgoingSeqNum
         var outmsg = fixutil.convertToFIX(msg, fixVersion,  fixutil.getUTCTimeStamp(),
             senderCompID,  targetCompID,  outgoingSeqNum, {senderSubID: senderSubID, targetSubID: targetSubID, senderLocationID: senderLocationID});
-        
         
         self.emit('dataOut', msg)
         self.emit('fixOut', outmsg)
@@ -352,7 +412,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
             fixClient.connection.write(outmsg)
             
         if(!replay){
-            timeOfLastOutgoing = new Date().getTime();
+            timeOfLastOutgoing = new Date().getTime()
             session.outgoingSeqNum++
             self.logToFile(outmsg)
             saveSession()

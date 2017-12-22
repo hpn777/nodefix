@@ -154,23 +154,15 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
 	
         const msgSeqNum = Number(fix['34'])        
 
-        if(msgType !== '4' && msgType !== '5'){
-            //==Check sequence numbers
+        if(msgType !== '4' && msgType !== '5' && fix['43'] !== 'Y'){
             if (msgSeqNum >= requestResendTargetSeqNum) {
                 isResendRequested = false;
             }	    
-            //less than expected
+            
             if (msgSeqNum < session.incomingSeqNum && !isResendRequested) {
-                //ignore posdup
-                if (fix['43'] === 'Y') {
-                    return Observable.never()
-                }
-                //if not posdup, error
-                else {
-                    var error = '[ERROR] Incoming sequence number ['+msgSeqNum+'] lower than expected [' + session.incomingSeqNum+ ']'
-                    self.logoff(error)
-                    throw new Error(error + ' : ' + raw)
-                }
+                var error = '[ERROR] Incoming sequence number ['+msgSeqNum+'] lower than expected [' + session.incomingSeqNum+ ']'
+                self.logoff(error)
+                throw new Error(error + ' : ' + raw)
             }
             //greater than expected
             else if( msgSeqNum > session.incomingSeqNum && (requestResendTargetSeqNum == 0 || requestResendRequestedSeqNum !== requestResendTargetSeqNum)) {
@@ -197,7 +189,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                 var resetSeqNo = Number(fix['36'])
                 if(resetSeqNo !== NaN){
                     if (resetSeqNo >= session.incomingSeqNum) {
-                        if(resetSeqNo == (requestResendTargetSeqNum + 1) && requestResendRequestedSeqNum !== requestResendTargetSeqNum){
+                        if(resetSeqNo > requestResendTargetSeqNum && requestResendRequestedSeqNum !== requestResendTargetSeqNum){
                             session.incomingSeqNum = requestResendRequestedSeqNum + 1
                             isResendRequested = false
                             self.requestResend(session.incomingSeqNum, requestResendTargetSeqNum)
@@ -208,7 +200,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
                     } else {
                         var error = '[ERROR] Seq-reset may not decrement sequence numbers' 
                         // self.logoff(error)
-                        throw new Error(error + ' : ' + raw)
+                        //throw new Error(error + ' : ' + raw)
                     }
                 } else {
                     var error = '[ERROR] Seq-reset has invalid sequence numbers'

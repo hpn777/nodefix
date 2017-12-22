@@ -24,7 +24,7 @@ exports.FrameDecoder = function($){
 
             //If we don't have enough data to start extracting body length, wait for more data
             if (buffer.length <= ENDOFTAG8) {
-                return Observable.never()
+                return Observable.fromArray(messages)
             }
 
             var idxOfEndOfTag9 = Number(buffer.substring(ENDOFTAG8).indexOf(SOHCHAR)) + ENDOFTAG8;

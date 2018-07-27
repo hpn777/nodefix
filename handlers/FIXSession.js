@@ -1,10 +1,10 @@
 var util = require('util');
 var fs = require('fs');
 var readline = require('readline')
-const { Observable } = require('rx');
+const { Observable } = require('rxjs/Rx');
 var storage = require('node-persist');
 var fixutil = require('../fixutils.js');
-var _  = require('underscore');
+var _  = require('lodash');
 var events = require('events');
 var sessions = {}
 
@@ -334,7 +334,7 @@ exports.FIXSession = function(fixClient, isAcceptor, options) {
     			var _msgType = _fix[35];
                 var _seqNo = Number(_fix[34]);
                 if((BeginSeqNo <= _seqNo) && ( EndSeqNo >= _seqNo)){
-                    if (_.include(['A', '5', '2', '0', '1', '4'], _msgType)) {
+                    if (_.includes(['A', '5', '2', '0', '1', '4'], _msgType)) {
                         //send seq-reset with gap-fill Y
                         fillGapBuffer.push(_fix)
                         

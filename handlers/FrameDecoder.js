@@ -1,6 +1,6 @@
 var fixutil = require('../fixutils.js');
 var util = require('util');
-var { Observable } = require('rx')
+var { Observable } = require('rxjs/Rx')
 const _ = require('lodash')
 
 //static vars
@@ -24,7 +24,7 @@ exports.FrameDecoder = function($){
 
             //If we don't have enough data to start extracting body length, wait for more data
             if (buffer.length <= ENDOFTAG8) {
-                return Observable.fromArray(messages)
+                return Observable.from(messages)
             }
 
             var idxOfEndOfTag9 = Number(buffer.substring(ENDOFTAG8).indexOf(SOHCHAR)) + ENDOFTAG8;
@@ -45,7 +45,7 @@ exports.FrameDecoder = function($){
                 }
             }
             else{//Message received!
-                return Observable.fromArray(messages)
+                return Observable.from(messages)
             }
             //====================================Step 2: Validate message====================================
 
@@ -61,6 +61,6 @@ exports.FrameDecoder = function($){
             messages.push(msg)
         }
 
-        return Observable.fromArray(messages)
+        return Observable.from(messages)
     }
 }

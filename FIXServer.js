@@ -1,4 +1,4 @@
-const { Observable, Subject } = require('rx')
+const { Observable, Subject } = require('rxjs/Rx')
 var net = require('net');
 var fixutil = require('./fixutils.js');
 var {FrameDecoder} = require('./handlers/FrameDecoder')

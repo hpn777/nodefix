@@ -32,11 +32,11 @@
   },
   "bundleDependencies": false,
   "dependencies": {
+    "lodash": "^4.17.10",
     "moment": "^2.18.1",
     "node-persist": "^2.1.0",
-    "rx": "^4.1.0",
-    "underscore": "^1.1.6",
-    "underscore.string": "1.1.4"
+    "rxjs": "^6.2.2",
+    "rxjs-compat": "^6.2.2"
   },
   "deprecated": false,
   "description": "FIX Protocol library",

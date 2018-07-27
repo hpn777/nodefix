@@ -1,5 +1,5 @@
-const { Observable, Subject } = require('rx')
-const _ = require('underscore')
+const { Observable, Subject } = require('rxjs/Rx')
+const _ = require('lodash')
 var net = require('net');
 var tls = require('tls');
 var fixutil = require('./fixutils.js');
